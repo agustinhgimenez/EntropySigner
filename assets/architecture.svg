@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1080" width="960" height="1080" role="img" aria-labelledby="t d">
+  <title id="t">EntropySigner - System Architecture</title>
+  <desc id="d">Full data flow from LDR and ESP32 hardware RNG through SHA-256 conditioning, BIP-39, PBKDF2, BIP-32 and BIP-44 to Bitcoin and Ethereum addresses shown as QR codes on the display.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#00E5FF"/>
+    </marker>
+    <style>
+      .box{fill:#0F1620;stroke:#00E5FF;stroke-width:2}
+      .sec{fill:#0F1620;stroke:#FF4D6D;stroke-width:2;stroke-dasharray:6 4}
+      .pub{fill:#0F1620;stroke:#00FF9C;stroke-width:2}
+      .src{fill:#0F1620;stroke:#FFC857;stroke-width:2}
+      .t{font-family:'JetBrains Mono','Consolas',monospace;fill:#E6EDF3;font-size:18px;font-weight:700;text-anchor:middle}
+      .s{font-family:'JetBrains Mono','Consolas',monospace;fill:#8B98A5;font-size:13px;text-anchor:middle}
+      .l{stroke:#00E5FF;stroke-width:2;fill:none;marker-end:url(#a)}
+      .h{font-family:'JetBrains Mono','Consolas',monospace;fill:#E6EDF3;font-size:26px;font-weight:700;text-anchor:middle;letter-spacing:3px}
+      .k{font-family:'JetBrains Mono','Consolas',monospace;font-size:13px}
+    </style>
+  </defs>
+  <rect width="960" height="1080" fill="#0B0F14"/>
+  <text x="480" y="48" class="h">ENTROPYSIGNER &#183; ARCHITECTURE</text>
+
+  <!-- Entropy sources -->
+  <rect x="120" y="80" width="240" height="70" rx="10" class="src"/>
+  <text x="240" y="112" class="t">LDR &#8594; ADC1</text>
+  <text x="240" y="134" class="s">physical variability (extra)</text>
+
+  <rect x="600" y="80" width="240" height="70" rx="10" class="src"/>
+  <text x="720" y="112" class="t">ESP32 HW RNG</text>
+  <text x="720" y="134" class="s">primary crypto source</text>
+
+  <path d="M240,150 V190 H470 V210" class="l"/>
+  <path d="M720,150 V190 H490 V210" class="l"/>
+
+  <rect x="330" y="210" width="300" height="70" rx="10" class="box"/>
+  <text x="480" y="242" class="t">SHA-256 conditioning</text>
+  <text x="480" y="264" class="s">SHA-256(LDR_DATA || RNG_DATA)</text>
+
+  <path d="M480,280 V310" class="l"/>
+  <rect x="330" y="310" width="300" height="60" rx="10" class="sec"/>
+  <text x="480" y="338" class="t">256-bit entropy</text>
+  <text x="480" y="358" class="s">secret</text>
+
+  <path d="M480,370 V400" class="l"/>
+  <rect x="280" y="400" width="400" height="70" rx="10" class="box"/>
+  <text x="480" y="430" class="t">BIP-39</text>
+  <text x="480" y="452" class="s">+8-bit checksum &#8594; 264 bits &#8594; 24 &#215; 11 bits</text>
+
+  <path d="M480,470 V500" class="l"/>
+  <rect x="330" y="500" width="300" height="60" rx="10" class="sec"/>
+  <text x="480" y="528" class="t">24 words</text>
+  <text x="480" y="548" class="s">secret &#183; backup only</text>
+
+  <path d="M480,560 V590" class="l"/>
+  <rect x="280" y="590" width="400" height="60" rx="10" class="box"/>
+  <text x="480" y="618" class="t">PBKDF2-HMAC-SHA512</text>
+  <text x="480" y="638" class="s">2048 iterations &#8594; 512-bit seed</text>
+
+  <path d="M480,650 V680" class="l"/>
+  <rect x="280" y="680" width="400" height="60" rx="10" class="box"/>
+  <text x="480" y="708" class="t">BIP-32 &#8594; BIP-44</text>
+  <text x="480" y="728" class="s">master key + chain code &#8594; child keys</text>
+
+  <path d="M400,740 V770 H240 V790" class="l"/>
+  <path d="M560,740 V770 H720 V790" class="l"/>
+
+  <rect x="110" y="790" width="260" height="70" rx="10" class="box"/>
+  <text x="240" y="820" class="t">Bitcoin</text>
+  <text x="240" y="842" class="s">m/44'/0'/0'/0/0</text>
+
+  <rect x="590" y="790" width="260" height="70" rx="10" class="box"/>
+  <text x="720" y="820" class="t">Ethereum</text>
+  <text x="720" y="842" class="s">m/44'/60'/0'/0/0 &#183; Keccak-256</text>
+
+  <path d="M240,860 V890" class="l"/>
+  <path d="M720,860 V890" class="l"/>
+  <rect x="140" y="890" width="200" height="50" rx="10" class="pub"/>
+  <text x="240" y="921" class="t">address + QR</text>
+  <rect x="620" y="890" width="200" height="50" rx="10" class="pub"/>
+  <text x="720" y="921" class="t">address + QR</text>
+
+  <path d="M240,940 V965 H470 V980" class="l"/>
+  <path d="M720,940 V965 H490 V980" class="l"/>
+  <rect x="330" y="980" width="300" height="60" rx="10" class="pub"/>
+  <text x="480" y="1008" class="t">DISPLAY + TOUCH</text>
+  <text x="480" y="1028" class="s">ST7796S IPS &#183; FT6336U &#183; USER</text>
+
+  <!-- Legend -->
+  <g transform="translate(20 1000)">
+    <rect width="14" height="14" fill="none" stroke="#FFC857" stroke-width="2"/><text x="22" y="12" class="k" fill="#8B98A5">entropy source</text>
+    <rect y="22" width="14" height="14" fill="none" stroke="#FF4D6D" stroke-width="2" stroke-dasharray="3 2"/><text x="22" y="34" class="k" fill="#8B98A5">secret</text>
+    <rect y="44" width="14" height="14" fill="none" stroke="#00FF9C" stroke-width="2"/><text x="22" y="56" class="k" fill="#8B98A5">public</text>
+  </g>
+  <text x="940" y="1068" class="s" style="text-anchor:end">SHA-256 conditions entropy &#8212; it does not create it.</text>
+</svg>

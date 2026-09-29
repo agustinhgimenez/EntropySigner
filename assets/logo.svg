@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" width="760" height="200" role="img" aria-labelledby="t d">
+  <title id="t">EntropySigner</title>
+  <desc id="d">EntropySigner logo: a hexagonal shield built from circuit traces surrounding a keyhole fed by random entropy dots.</desc>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00E5FF"/>
+      <stop offset="1" stop-color="#00FF9C"/>
+    </linearGradient>
+  </defs>
+  <rect width="760" height="200" rx="16" fill="#0B0F14"/>
+
+  <!-- Icon -->
+  <g transform="translate(100 100)">
+    <!-- Hexagonal shield -->
+    <polygon points="0,-72 62,-36 62,36 0,72 -62,36 -62,-36" fill="none" stroke="url(#g)" stroke-width="6" stroke-linejoin="round"/>
+    <polygon points="0,-56 48,-28 48,28 0,56 -48,28 -48,-28" fill="#0F1620" stroke="#1C2A38" stroke-width="2"/>
+    <!-- Circuit traces leaving the shield -->
+    <g stroke="url(#g)" stroke-width="3" fill="none" stroke-linecap="round">
+      <path d="M62,-18 H80 V-40 H90"/>
+      <path d="M62,18 H84 V36 H90"/>
+      <path d="M-62,-18 H-80 V-40 H-90"/>
+      <path d="M-62,18 H-84 V36 H-90"/>
+    </g>
+    <g fill="#00FF9C">
+      <circle cx="92" cy="-40" r="4"/><circle cx="92" cy="36" r="4"/>
+      <circle cx="-92" cy="-40" r="4"/><circle cx="-92" cy="36" r="4"/>
+    </g>
+    <!-- Entropy dots (irregular grid) -->
+    <g fill="#00E5FF">
+      <rect x="-34" y="-38" width="6" height="6" opacity="0.9"/>
+      <rect x="-22" y="-44" width="6" height="6" opacity="0.5"/>
+      <rect x="-10" y="-38" width="6" height="6" opacity="0.7"/>
+      <rect x="10" y="-44" width="6" height="6" opacity="0.4"/>
+      <rect x="22" y="-38" width="6" height="6" opacity="0.8"/>
+      <rect x="-28" y="-26" width="6" height="6" opacity="0.35"/>
+      <rect x="16" y="-26" width="6" height="6" opacity="0.6"/>
+      <rect x="28" y="-20" width="6" height="6" opacity="0.3"/>
+      <rect x="-36" y="-14" width="6" height="6" opacity="0.55"/>
+    </g>
+    <!-- Keyhole -->
+    <circle cx="0" cy="-2" r="14" fill="url(#g)"/>
+    <path d="M-7,6 L-11,38 H11 L7,6 Z" fill="url(#g)"/>
+    <circle cx="0" cy="-2" r="5" fill="#0B0F14"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="220" y="98" font-family="'JetBrains Mono','Fira Code','Consolas',monospace" font-size="54" font-weight="700" letter-spacing="2" fill="#E6EDF3">ENTROPY<tspan fill="url(#g)">SIGNER</tspan></text>
+  <text x="222" y="136" font-family="'JetBrains Mono','Fira Code','Consolas',monospace" font-size="17" letter-spacing="5" fill="#8B98A5">EDUCATIONAL HARDWARE WALLET &#183; ESP32</text>
+  <rect x="222" y="150" width="120" height="3" fill="url(#g)"/>
+</svg>

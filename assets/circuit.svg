@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" width="1000" height="640" role="img" aria-labelledby="t d">
+  <title id="t">EntropySigner - Wiring diagram</title>
+  <desc id="d">ESP32-S3-DevKitC-1 connected to an ST7796S SPI display, an FT6336U I2C capacitive touch controller and an LDR voltage divider on GPIO1.</desc>
+  <defs>
+    <style>
+      .b{fill:#0F1620;stroke-width:2}
+      .t{font-family:'JetBrains Mono','Consolas',monospace;fill:#E6EDF3;font-size:18px;font-weight:700;text-anchor:middle}
+      .p{font-family:'JetBrains Mono','Consolas',monospace;fill:#C9D1D9;font-size:13px}
+      .pr{font-family:'JetBrains Mono','Consolas',monospace;fill:#C9D1D9;font-size:13px;text-anchor:end}
+      .s{font-family:'JetBrains Mono','Consolas',monospace;fill:#8B98A5;font-size:12px;text-anchor:middle}
+      .spi{stroke:#00E5FF;stroke-width:2;fill:none}
+      .i2c{stroke:#00FF9C;stroke-width:2;fill:none}
+      .adc{stroke:#FFC857;stroke-width:2;fill:none}
+      .pwr{stroke:#FF4D6D;stroke-width:2;fill:none}
+      .gnd{stroke:#6E7681;stroke-width:2;fill:none}
+    </style>
+  </defs>
+  <rect width="1000" height="640" fill="#0B0F14"/>
+  <text x="500" y="36" class="t" style="font-size:24px;letter-spacing:3px">ENTROPYSIGNER &#183; WIRING (proposed)</text>
+
+  <!-- ESP32-S3 -->
+  <rect x="380" y="80" width="240" height="480" rx="12" class="b" stroke="#00E5FF"/>
+  <text x="500" y="110" class="t">ESP32-S3</text>
+  <text x="500" y="130" class="s">DevKitC-1 &#183; N16R8</text>
+  <g>
+    <text x="610" y="170" class="pr">GPIO12 SCLK</text>
+    <text x="610" y="200" class="pr">GPIO11 MOSI</text>
+    <text x="610" y="230" class="pr">GPIO13 MISO</text>
+    <text x="610" y="260" class="pr">GPIO10 CS</text>
+    <text x="610" y="290" class="pr">GPIO9 DC</text>
+    <text x="610" y="320" class="pr">GPIO8 RST</text>
+    <text x="610" y="350" class="pr">GPIO7 BL</text>
+    <text x="610" y="410" class="pr">GPIO15 SDA</text>
+    <text x="610" y="440" class="pr">GPIO16 SCL</text>
+    <text x="610" y="470" class="pr">GPIO17 INT</text>
+    <text x="610" y="500" class="pr">GPIO18 RST</text>
+    <text x="390" y="200" class="p">3V3</text>
+    <text x="390" y="260" class="p">GPIO1 ADC1_CH0</text>
+    <text x="390" y="320" class="p">GND</text>
+    <text x="390" y="520" class="p">USB-C (5V)</text>
+  </g>
+
+  <!-- Display -->
+  <rect x="760" y="140" width="210" height="230" rx="12" class="b" stroke="#00E5FF"/>
+  <text x="865" y="170" class="t">DISPLAY</text>
+  <text x="865" y="190" class="s">ST7796S &#183; 320&#215;480 IPS &#183; SPI</text>
+  <g>
+    <text x="772" y="222" class="p">SCK</text>
+    <text x="772" y="246" class="p">SDI/MOSI</text>
+    <text x="772" y="270" class="p">SDO/MISO</text>
+    <text x="772" y="294" class="p">CS</text>
+    <text x="772" y="318" class="p">DC/RS</text>
+    <text x="772" y="342" class="p">RST</text>
+    <text x="772" y="366" class="p">LED</text>
+  </g>
+  <g class="spi">
+    <path d="M620,166 H690 V218 H760"/>
+    <path d="M620,196 H700 V242 H760"/>
+    <path d="M620,226 H710 V266 H760"/>
+    <path d="M620,256 H720 V290 H760"/>
+    <path d="M620,286 H730 V314 H760"/>
+    <path d="M620,316 H740 V338 H760"/>
+    <path d="M620,346 H750 V362 H760"/>
+  </g>
+
+  <!-- Touch -->
+  <rect x="760" y="390" width="210" height="140" rx="12" class="b" stroke="#00FF9C"/>
+  <text x="865" y="418" class="t">TOUCH</text>
+  <text x="865" y="436" class="s">FT6336U &#183; I&#178;C 0x38</text>
+  <g>
+    <text x="772" y="462" class="p">CTP_SDA</text>
+    <text x="772" y="482" class="p">CTP_SCL</text>
+    <text x="772" y="502" class="p">CTP_INT</text>
+    <text x="772" y="522" class="p">CTP_RST</text>
+  </g>
+  <g class="i2c">
+    <path d="M620,406 H700 V458 H760"/>
+    <path d="M620,436 H710 V478 H760"/>
+    <path d="M620,466 H720 V498 H760"/>
+    <path d="M620,496 H730 V518 H760"/>
+  </g>
+
+  <!-- LDR divider -->
+  <rect x="40" y="140" width="250" height="300" rx="12" class="b" stroke="#FFC857"/>
+  <text x="165" y="170" class="t">LDR DIVIDER</text>
+  <text x="165" y="190" class="s">GL5528 + 10 k&#937;</text>
+  <path d="M380,196 H165 V220" class="pwr"/>
+  <rect x="150" y="220" width="30" height="60" rx="4" fill="none" stroke="#FFC857" stroke-width="2"/>
+  <text x="200" y="255" class="p">LDR</text>
+  <path d="M110,215 L140,235 M110,235 L140,255" stroke="#FFC857" stroke-width="2"/>
+  <path d="M134,229 L140,235 L132,237 M134,249 L140,255 L132,257" stroke="#FFC857" stroke-width="2" fill="none"/>
+  <path d="M165,280 V300" class="adc"/>
+  <circle cx="165" cy="300" r="4" fill="#FFC857"/>
+  <path d="M165,300 H270 V256 H380" class="adc"/>
+  <path d="M165,300 V320" class="gnd"/>
+  <rect x="150" y="320" width="30" height="60" rx="4" fill="none" stroke="#C9D1D9" stroke-width="2"/>
+  <text x="200" y="355" class="p">10 k&#937;</text>
+  <path d="M165,380 V410 H330 V316 H380" class="gnd"/>
+  <path d="M150,410 H180 M155,416 H175 M160,422 H170" class="gnd"/>
+
+  <!-- Power -->
+  <path d="M380,516 H300 V580" class="pwr"/>
+  <text x="300" y="600" class="s">USB 5V &#8594; onboard LDO 3.3V</text>
+
+  <!-- Legend -->
+  <g transform="translate(40 470)">
+    <path d="M0,6 H30" class="spi"/><text x="40" y="10" class="p">SPI display</text>
+    <path d="M0,28 H30" class="i2c"/><text x="40" y="32" class="p">I&#178;C touch</text>
+    <path d="M0,50 H30" class="adc"/><text x="40" y="54" class="p">ADC (LDR)</text>
+    <path d="M0,72 H30" class="pwr"/><text x="40" y="76" class="p">3V3 / 5V</text>
+    <path d="M0,94 H30" class="gnd"/><text x="40" y="98" class="p">GND</text>
+  </g>
+  <text x="980" y="625" class="s" style="text-anchor:end">Display and touch VCC/GND to 3V3/GND (check module datasheet). Pins configurable in board_config.h.</text>
+</svg>
