@@ -79,8 +79,15 @@ Los secretos nunca salen del dispositivo.
 | ESP-IDF puro | Control total, pero mayor complejidad; no hay una razón técnica fuerte que lo exija. Arduino-ESP32 está construido sobre ESP-IDF, así que las APIs críticas siguen disponibles. |
 | Arduino IDE | Sin builds reproducibles ni tests: descartado. |
 
-La versión exacta de la plataforma `espressif32` y del core Arduino se fijará en
-`platformio.ini` en el Paso 1 y se documentará aquí.
+Versiones fijadas en `platformio.ini` (Paso 1):
+
+| Componente | Versión |
+|---|---|
+| Plataforma PlatformIO `espressif32` | 6.9.0 |
+| Arduino-ESP32 core | 2.0.17 (ESP-IDF 4.4) |
+| Toolchain | xtensa-esp32s3 GCC 8.4.0 (2021r2-patch5) |
+| LovyanGFX | 1.1.16 |
+| Unity (tests) | 2.6.1 |
 
 ---
 
@@ -125,7 +132,8 @@ Reglas de dependencia:
 | Directorio | Responsabilidad | Paso |
 |---|---|---|
 | `src/main.cpp` | Arranque, inicialización, loop | 1 |
-| `src/config/` | `board_config.h` (pines), `build_config.h` (modo) | 1 |
+| `src/config/` | `board_config.h` (pines), `pin_rules.h` (reglas GPIO), `build_config.h` (modo) | 1 |
+| `src/system/` | Información del dispositivo (chip, flash, PSRAM) | 1 |
 | `src/ui/` | Driver gráfico, pantallas, botones, navegación | 2–3, 15 |
 | `src/entropy/` | LDR (ADC), RNG de hardware, pool/conditioning | 4–6 |
 | `src/crypto/` | Wrappers sobre SHA-256, HMAC, PBKDF2, RIPEMD-160, Keccak-256 | 7, 10 |
@@ -135,7 +143,7 @@ Reglas de dependencia:
 | `src/ethereum/` | BIP-44 `m/44'/60'/0'/0/0`, Keccak-256, EIP-55 | 13 |
 | `src/qr/` | Generación y render de QR | 14 |
 | `src/security/` | Borrado seguro de memoria, modos, política de logs | 1, 19 |
-| `tests/` | Unity: `native` (host) y `esp32s3` (dispositivo) | 5+ |
+| `tests/` | Unity: `native` (host, requiere GCC/MinGW en la PC) y `esp32s3` (dispositivo) | 1+ |
 | `tools/entropy_analysis/` | Captura y análisis de muestras LDR (Python) | 4, 17 |
 | `tools/verification/` | Verificación cruzada con implementaciones independientes (Python) | 8+ |
 | `firmware/esp32/` | Tabla de particiones, defaults de configuración, scripts de flasheo | 1+ |
