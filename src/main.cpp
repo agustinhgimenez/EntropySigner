@@ -7,6 +7,7 @@
 #include "system/device_info.h"
 #include "ui/display.h"
 
+#ifndef UNIT_TEST
 void setup() {
     Serial.begin(115200);
     delay(500);  // give the USB-UART bridge time to enumerate before the banner
@@ -30,3 +31,4 @@ void setup() {
 void loop() {
     delay(1000);
 }
+#endif
