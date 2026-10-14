@@ -60,9 +60,9 @@ void test_sha256_nist_abc() {
 
 void test_sha256_nist_multi_block() {
     // NIST: SHA-256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq") =
-    //       248d6a61d20638b8e5c026930c3e6039a33ce45964ff21a7f7b70bc00f80a647
+    //       248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1
     const char* input = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
-    const char* expected_hex = "248d6a61d20638b8e5c026930c3e6039a33ce45964ff21a7f7b70bc00f80a647";
+    const char* expected_hex = "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1";
     uint8_t expected[32];
     hexToBytes(expected_hex, expected, 32);
 
