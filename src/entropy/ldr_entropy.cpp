@@ -16,9 +16,8 @@ bool g_ldr_initialized = false;
 }  // namespace
 
 void initLdr() {
-    if (g_ldr_initialized) {
-        return;
-    }
+    // Re-configured unconditionally because bootloader_random_disable()
+    // alters SAR ADC registers during TRNG operations.
     analogReadResolution(kAdcResolutionBits);
     analogSetPinAttenuation(board::kLdrPin, ADC_11db);  // full 0..~3.1 V range
     g_ldr_initialized = true;

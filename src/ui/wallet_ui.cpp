@@ -24,6 +24,7 @@ namespace {
 
 constexpr uint32_t kBootTimeoutMs = 2500;
 constexpr uint32_t kTapGuardMs = 250;  // ignore taps right after a screen change
+constexpr uint32_t kMnemonicTimeoutMs = 120000;  // 2-min inactivity timeout: wipes mnemonic and resets to IDLE
 constexpr uint32_t kLdrSamplePeriodMs = 40;
 constexpr uint32_t kLdrRedrawPeriodMs = 120;
 
@@ -527,7 +528,11 @@ void updateWallet() {
         case WalletState::GENERATING:
             // Blocking (PBKDF2 dominates); the screen shows per-step progress.
             if (generateWallet()) {
+#if defined(ES_MODE_DEMO)
                 ES_LOG_INFO("Wallet generated. BTC %s | ETH %s", g_session.btc_address, g_session.eth_address);
+#else
+                ES_LOG_INFO("Wallet generated successfully.");
+#endif
                 enterState(WalletState::BACKUP_WARNING);
             } else {
                 ES_LOG_INFO("Wallet generation failed at: %s", g_error);
@@ -537,7 +542,10 @@ void updateWallet() {
             break;
 
         case WalletState::BACKUP_WARNING:
-            if (tap && kLeftButton.contains(x, y)) {
+            if (millis() - g_state_entered_ms >= kMnemonicTimeoutMs) {
+                ES_LOG_INFO("Backup warning screen timed out, wiping session");
+                enterState(WalletState::IDLE);
+            } else if (tap && kLeftButton.contains(x, y)) {
                 enterState(WalletState::IDLE);
             } else if (tap && kRightButton.contains(x, y)) {
                 enterState(WalletState::SHOW_MNEMONIC);
@@ -545,7 +553,10 @@ void updateWallet() {
             break;
 
         case WalletState::SHOW_MNEMONIC:
-            if (tap && kWideButton.contains(x, y)) {
+            if (millis() - g_state_entered_ms >= kMnemonicTimeoutMs) {
+                ES_LOG_INFO("Mnemonic screen timed out, wiping session");
+                enterState(WalletState::IDLE);
+            } else if (tap && kWideButton.contains(x, y)) {
                 enterState(WalletState::SHOW_BTC);
             }
             break;

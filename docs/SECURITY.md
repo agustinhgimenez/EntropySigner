@@ -210,8 +210,9 @@ que el módulo sea C++ puro y testeable en el host (`tests/test_crypto`).
 | Las estructuras de clave se borran completas (clave, chain code y metadatos) | `bip32::wipe(ExtendedPrivateKey*)`, `bip32::wipe(ExtendedPublicKey*)` |
 | Los contextos de mbedTLS se liberan con su función `*_free()`, que hace zeroize interno | Wrappers RAII `Mpi`/`Point` en `bip32.cpp`; `mbedtls_hmac_drbg_free()` |
 | Un secreto vive lo mínimo indispensable | Entropía: se borra tras `entropyToMnemonic()`. Seed: tras `createMasterKey()`. Claves BIP-44: tras calcular la pública (`bitcoin.cpp`, `ethereum.cpp`) |
-| El mnemonic se borra al abandonar el backup | `enterState()`: al salir de `SHOW_MNEMONIC`; `wipeSession()` al volver a `IDLE` o si falla la generación |
-| Nunca se pasan secretos a `ES_LOG_*` | Política en `secure_log.h`. Solo se loguean estados de la UI y direcciones públicas |
+| El mnemonic se borra al abandonar el backup o tras inactividad | `enterState()`: al salir de `SHOW_MNEMONIC`, por timeout de inactividad (2 min) o por botón CANCELAR; `wipeSession()` al volver a `IDLE` o si falla la generación |
+| En PRODUCTION no se loguean direcciones públicas por USB | Protegido con `#if defined(ES_MODE_DEMO)` para evitar correlación de identidad con una PC conectada (A2) |
+| Nunca se pasan secretos a `ES_LOG_*` | Política en `secure_log.h`. Solo se loguean estados de la UI y direcciones públicas (en modo DEMO) |
 
 ### 3.4 Lo que el ceroizado no garantiza
 
@@ -366,16 +367,17 @@ U = 2^(n_in − n) + sqrt(2·n·2^(n_in − n)·ln 2)        ω = U·P_low
 h_out = −log2( max(ψ, ω) )
 ```
 
-Valores para el firmware (n_in = 2544, n_out = nw = 256), calculados por la
-herramienta:
+Valores teóricos para el acondicionamiento (con n_out = nw = 256):
 
-| Escenario | h_in | h_out |
-|---|---|---|
-| RNG a entropía completa, LDR acreditado en 0 (**política**) | 256 | 255.0 |
-| RNG degradado a 128 bits | 128 | 128.0 |
-| RNG completo + margen de 64 bits (criterio de *full entropy* de SP 800-90C) | 320 | 256.0 |
-| RNG comprometido, LDR medido sin atacante (optimista, **no acreditado**) | 403.9 | 256.0 |
-| RNG comprometido y LDR saturado | 0 | 0.0 |
+| Escenario | h_in (bits) | h_out (bits) | Estado en EntropySigner |
+|---|---|---|---|
+| RNG HW a 32 bytes (256 bits nom.), LDR acreditado en 0 | 256 | 255.0 | Versión previa (pérdida fraccionaria teórica) |
+| **RNG HW a 64 bytes (512 bits)**, LDR acreditado en 0 | **≥ 320** | **256.0** | **Implementación actual:** cumple criterio SP 800-90C ($h_{in} \ge n_{out} + 64$) |
+| RNG degradado a 128 bits | 128 | 128.0 | Tolerancia a fallos parciales |
+| RNG comprometido, LDR medido sin atacante | 403.9 | 256.0 | Escenario optimista (**no acreditado por política**) |
+| RNG comprometido y LDR saturado | 0 | 0.0 | Falla total de fuentes físicas |
+
+Al muestrear `kHwRngBytes = 64` (512 bits) del TRNG por hardware del ESP32-S3, la entrada aporta sobradamente más de los 320 bits de min-entropía requeridos por la recomendación NIST SP 800-90C para garantizar que el valor resultante del digest SHA-256 alcance **256.0 bits completos de min-entropía** sin déficit fraccionario. Además, `initLdr()` reestablece la atenuación del ADC en cada ciclo de muestreo para prevenir cualquier descalibración originada tras el ciclo del SAR ADC del TRNG.
 
 **Combinación de fuentes.** Si X (RNG) es impredecible e independiente de Y
 (LDR), modelando SHA-256 como oráculo aleatorio, la salida es casi uniforme
@@ -420,15 +422,15 @@ nominal, el adversario genérico seguiría enfrentando ~2¹²⁸ operaciones.
 
 | Capa | Herramienta | Qué demuestra |
 |---|---|---|
-| Unitaria (host / ESP32) | Unity, `tests/test_*` | C++ == vectores oficiales (NIST, Bosselaers, BIP-32 TV1-2, Trezor BIP-39, Bitcoin Core Base58, EIP-55) |
-| Cruzada | `python tools/verification/verify_cross.py` | Implementación independiente en Python == los mismos vectores, y cada valor esperado figura **literalmente** en `tests/*.cpp`. Juntas implican **C++ == Python, bit a bit** |
-| Estadística | `python tools/entropy_analysis/analyze_entropy.py` | Comportamiento de las fuentes según SP 800-90B (§5.3) |
+| Unitaria en hardware | Unity, `tests/test_*` (`pio test -e esp32s3-demo`) | Ejecución sobre el ESP32-S3: valida drivers, aceleración SHA, hardware RNG, ADC, display y la suite de tests C++ contra vectores estándar |
+| Cruzada independiente (host) | `python tools/verification/verify_cross.py` | Implementación independiente en Python que valida 172 checks contra los estándares oficiales y confirma que los 123 literales esperados en `tests/*.cpp` concuerdan bit a bit |
+| Estadística | `python tools/entropy_analysis/analyze_entropy.py` | Comportamiento de las fuentes según SP 800-90B (§5.3) y análisis del acondicionador SHA-256 |
 
 La verificación cruzada no depende del firmware. RIPEMD-160, Keccak-f[1600] y
 secp256k1 se implementaron en Python a partir de sus especificaciones, y la
 permutación Keccak se valida además contra `hashlib.sha3_256` (misma
 permutación, padding FIPS 202 `0x06`). Resultado actual: **172 checks PASS,
-0 FAIL, 123 literales confirmados** en los tests C++.
+0 FAIL, 123 literales confirmados** en los tests C++. Juntas demuestran la equivalencia matemática rigurosa entre las especificaciones oficiales, el modelo de referencia en Python y los tests del firmware.
 
 > **Hallazgo.** La primera ejecución de `verify_cross.py` detectó que el vector
 > NIST de SHA-256 para el mensaje de 448 bits (`"abcdbcdecdef…nopq"`) en

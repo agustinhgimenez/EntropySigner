@@ -73,9 +73,7 @@ Los secretos nunca salen del dispositivo.
 
 ## 2. Decisión de framework
 
-| Opción | Evaluación |
-|---|---|
-| **PlatformIO + Arduino (ESP32 core)** | ✅ **Elegida.** Build reproducible (`platformio.ini`), gestión de librerías con versiones fijas, tests unitarios integrados (Unity) tanto en **host (`native`)** como en **dispositivo**, y acceso igualmente a las APIs de ESP-IDF (`esp_random`, `esp_adc`, mbedTLS). |
+| **PlatformIO + Arduino (ESP32 core)** | ✅ **Elegida.** Build reproducible (`platformio.ini`), gestión de librerías con versiones fijas, suite de tests unitarios Unity en **dispositivo** (`pio test -e esp32s3-demo`), verificación cruzada en **host** mediante scripts independientes de Python (`tools/verification/`), y acceso directo a las APIs de ESP-IDF (`esp_random`, `esp_adc`, mbedTLS). |
 | ESP-IDF puro | Control total, pero mayor complejidad; no hay una razón técnica fuerte que lo exija. Arduino-ESP32 está construido sobre ESP-IDF, así que las APIs críticas siguen disponibles. |
 | Arduino IDE | Sin builds reproducibles ni tests: descartado. |
 
@@ -122,10 +120,11 @@ Reglas de dependencia:
 
 - Las capas sólo dependen de capas **inferiores**.
 - `crypto/`, `bip39/`, `bip32/`, `bitcoin/`, `ethereum/` **no dependen de Arduino**:
-  son C/C++ puro para poder testearlos en la PC (`pio test -e native`) contra
-  vectores oficiales.
+  son C/C++ puro con mbedTLS para máxima portabilidad, auditables y con sus vectores
+  verificados contra Python (`tools/verification/verify_cross.py`) y testeables
+  en hardware con Unity (`pio test -e esp32s3-demo`).
 - `ui/` nunca recibe claves privadas ni seed: sólo direcciones públicas y, en el
-  flujo de backup, las palabras (con advertencia).
+  flujo de backup, las palabras (con advertencia y timeout de borrado automático).
 
 ### Módulos previstos
 
@@ -135,7 +134,7 @@ Reglas de dependencia:
 | `src/config/` | `board_config.h` (pines), `pin_rules.h` (reglas GPIO), `build_config.h` (modo) | 1 |
 | `src/system/` | Información del dispositivo (chip, flash, PSRAM) | 1 |
 | `src/ui/` | Driver gráfico, pantallas, botones, navegación | 2–3, 15 |
-| `src/entropy/` | LDR (ADC), RNG de hardware, pool/conditioning | 4–6 |
+| `src/entropy/` | LDR (ADC), RNG de hardware, pool/conditioning (64 B TRNG + LDR) | 4–6 |
 | `src/crypto/` | Wrappers sobre SHA-256, HMAC, PBKDF2, RIPEMD-160, Keccak-256 | 7, 10 |
 | `src/bip39/` | Wordlist oficial, entropy → mnemonic, validación, seed | 8–10 |
 | `src/bip32/` | Master key, derivación hardened/normal, secp256k1 | 11 |
@@ -143,8 +142,8 @@ Reglas de dependencia:
 | `src/ethereum/` | BIP-44 `m/44'/60'/0'/0/0`, Keccak-256, EIP-55 | 13 |
 | `src/qr/` | Generación y render de QR | 14 |
 | `src/security/` | Borrado seguro de memoria, modos, política de logs | 1, 19 |
-| `tests/` | Unity: `native` (host, requiere GCC/MinGW en la PC) y `esp32s3` (dispositivo) | 1+ |
-| `tools/entropy_analysis/` | Captura y análisis de muestras LDR (Python) | 4, 17 |
+| `tests/` | Unity en dispositivo (`esp32s3-demo` via PlatformIO) | 1+ |
+| `tools/entropy_analysis/` | Captura y análisis de muestras LDR y TRNG NIST SP 800-90B (Python) | 4, 17 |
 | `tools/verification/` | Verificación cruzada con implementaciones independientes (Python) | 8+ |
 | `firmware/esp32/` | Tabla de particiones, defaults de configuración, scripts de flasheo | 1+ |
 
@@ -208,9 +207,8 @@ prototipo académico.
 ---
 
 ## 7. Estrategia de testing
-
-1. **Host (`native`)**: módulos criptográficos puros contra vectores oficiales
-   (SHA-256 "abc", vectores BIP-39 de Trezor, BIP-32 test vectors 1–3, etc.).
-2. **Dispositivo (`esp32s3`)**: RNG, ADC, integración con aceleradores HW.
-3. **Verificación cruzada** con scripts Python en `tools/verification/`.
-4. **Propiedades**: cambiar 1 bit de entropía / 1 palabra cambia el resultado.
+ 
+1. **Verificación cruzada independiente (host)**: scripts de Python (`tools/verification/verify_cross.py`) que auditan matemáticamente 172 vectores contra las especificaciones oficiales (BIP-39, BIP-32, Bitcoin P2PKH, Ethereum EIP-55).
+2. **Dispositivo (`esp32s3-demo`)**: suite Unity (`pio test -e esp32s3-demo`) ejecutada en hardware para validar periféricos, RNG, ADC, drivers de pantalla y aceleración por hardware.
+3. **Análisis de entropía NIST SP 800-90B**: suite matemática (`tools/entropy_analysis/analyze_entropy.py`) con estimadores non-IID (MCV, Collision, Lag Prediction) y health tests continuos (RCT/APT).
+4. **Propiedades criptográficas**: pruebas de avalancha y sensibilidad (cambiar 1 bit de entropía / 1 palabra cambia completamente las claves y direcciones derivadas).

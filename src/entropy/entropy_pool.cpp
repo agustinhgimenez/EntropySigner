@@ -15,7 +15,9 @@ static_assert(kEntropySize == crypto::kSha256DigestSize, "entropy size must matc
 // Domain separation: this digest cannot collide with SHA-256 used elsewhere.
 constexpr char kDomainTag[] = "EntropySigner/entropy-pool/v1";
 
-constexpr size_t kHwRngBytes = 32;
+// 64 bytes (512 bits) of HW TRNG data guarantees h_in >= n_out + 64 (SP 800-90C)
+// so that the SHA-256 conditioned output achieves full 256-bit min-entropy.
+constexpr size_t kHwRngBytes = 64;
 constexpr size_t kLdrSampleCount = 128;
 constexpr uint32_t kLdrSampleDelayUs = 200;
 

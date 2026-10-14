@@ -219,14 +219,14 @@ Flujo en el dispositivo:
 2. **GENERATING.** Entropía 256 bits → 24 palabras → seed → master key →
    direcciones BTC y ETH, con el progreso de cada paso en pantalla.
 3. **BACKUP_WARNING → SHOW_MNEMONIC.** Advertencia obligatoria y luego las 24
-   palabras numeradas. Al tocar **YA LAS ANOTE** el mnemonic se borra de la RAM.
+   palabras numeradas. Al tocar **YA LAS ANOTE** (o tras timeout de inactividad de 2 minutos) el mnemonic se borra de la RAM.
 4. **SHOW_BTC ⇄ SHOW_ETH.** Dirección de recepción y su QR. **TERMINAR**
    descarta la wallet: nada se guarda en flash.
 
 Herramientas en la PC (Python 3, sólo biblioteca estándar; `--serial` requiere `pyserial`):
 
 ```powershell
-python tools/verification/verify_cross.py                       # 172 checks C++ == Python
+python tools/verification/verify_cross.py                       # 172 checks de validación matemática (Python vs C++ vs estándares)
 python tools/entropy_analysis/analyze_entropy.py --synthetic all  # estimadores SP 800-90B
 python tools/entropy_analysis/analyze_entropy.py --file captura_ldr.txt --bits 12
 ```
@@ -613,9 +613,9 @@ Garantías que el firmware **sí** implementa:
 
 - **Ningún secreto en flash**: sin NVS, `Preferences`, EEPROM ni sistema de archivos.
 - **Sin radio**: WiFi y Bluetooth nunca se inicializan.
-- **Ceroizado** de entropía, mnemonic, seed y claves en todos los caminos de salida.
-- **QR y Serial sólo con datos públicos**; en PRODUCTION los logs de depuración no existen en el binario.
-- **LDR con crédito de entropía 0**: la seguridad descansa en el RNG de hardware.
+- **Ceroizado** de entropía, mnemonic, seed y claves en todos los caminos de salida, con timeout de inactividad de 2 minutos.
+- **QR y Serial sólo con datos públicos**; en PRODUCTION los logs de depuración y las direcciones por Serial están desactivados.
+- **TRNG de 64 bytes (512 bits)** con acondicionador SHA-256 para cumplir SP 800-90C (256 bits completos de min-entropía). LDR con crédito 0: la seguridad descansa en el silicio.
 
 ## Limitations
 

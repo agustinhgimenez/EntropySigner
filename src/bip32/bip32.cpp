@@ -207,25 +207,27 @@ bool ckdPriv(Secp256k1& curve, const ExtendedPrivateKey& parent, uint32_t index,
 }
 
 // Parses one decimal path index (< 2^31) with an optional hardened mark.
-// Advances *p past it.
+// Advances *p past it. Uses uint64_t to prevent integer overflow before
+// checking against kHardenedFlag.
 bool parsePathIndex(const char** p, uint32_t* index) {
     const char* s = *p;
     if (*s < '0' || *s > '9') {
         return false;
     }
-    uint32_t value = 0;
+    uint64_t value = 0;
     while (*s >= '0' && *s <= '9') {
-        value = value * 10 + static_cast<uint32_t>(*s - '0');
+        value = value * 10 + static_cast<uint64_t>(*s - '0');
         if (value >= kHardenedFlag) {
             return false;
         }
         ++s;
     }
+    uint32_t final_index = static_cast<uint32_t>(value);
     if (*s == '\'' || *s == 'h' || *s == 'H') {
-        value |= kHardenedFlag;
+        final_index |= kHardenedFlag;
         ++s;
     }
-    *index = value;
+    *index = final_index;
     *p = s;
     return true;
 }
