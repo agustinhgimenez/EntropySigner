@@ -101,7 +101,7 @@ Versiones fijadas en `platformio.ini` (Paso 1):
 │               direcciones. Modo DEMO / PRODUCTION            │
 ├───────────────┬───────────────┬──────────────┬───────────────┤
 │  bitcoin/     │  ethereum/    │  qr/         │  security/    │
-│  P2WPKH bech32│  Keccak-256   │  encoder QR  │  memzero,     │
+│  P2PKH Base58 │  Keccak-256   │  encoder QR  │  memzero,     │
 │               │  EIP-55       │  (sólo datos │  modos, logs  │
 │               │               │   públicos)  │               │
 ├───────────────┴───────────────┴──────────────┴───────────────┤
@@ -165,9 +165,10 @@ confiable; documentar biblioteca y versión.
 | Gráficos display | LovyanGFX (soporta ST7796 + FT6336) | TFT_eSPI | 2 |
 | UI de alto nivel | Propia sobre LovyanGFX | LVGL | 2, 15 |
 | SHA-256 / HMAC / PBKDF2 | **mbedTLS** (incluida en ESP-IDF, con aceleración HW) | — | 7, 10 |
-| secp256k1 | libsecp256k1 (bitcoin-core) | trezor-crypto | 11 |
-| RIPEMD-160 | trezor-crypto / mbedTLS (si está habilitado) | — | 12 |
-| Keccak-256 | trezor-crypto (`sha3.c` con `keccak_256`) | — | 13 |
+| secp256k1 | **mbedTLS ECP** (`MBEDTLS_ECP_DP_SECP256K1`, habilitada en Arduino-ESP32; descompresión de claves propia) | libsecp256k1 / trezor-crypto | 11 |
+| RIPEMD-160 | mbedTLS si `MBEDTLS_RIPEMD160_C`; el mbedTLS 2.28 precompilado de Arduino-ESP32 lo trae **deshabilitado**, así que se usa una implementación portable de la especificación verificada con los vectores oficiales | trezor-crypto | 11 |
+| Keccak-256 | **Implementación portable propia** (Keccak-f[1600], padding original `0x01`, no SHA3-256 de FIPS 202): el mbedTLS 2.28 de Arduino-ESP32 no trae SHA-3; verificada con vectores oficiales y una implementación independiente en Python | trezor-crypto (`sha3.c`) | 13 |
+| Base58Check | **Implementación propia** (`crypto/base58`, sobre SHA-256 de mbedTLS), verificada con los vectores de Bitcoin Core | — | 12 |
 | QR | `ricmoo/QRCode` | Nayuki QR-Code-generator | 14 |
 | Verificación en PC | `mnemonic` (Trezor), `bip_utils` | `embit` | 8+ |
 

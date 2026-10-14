@@ -16,6 +16,7 @@ namespace bip32 {
 constexpr uint32_t kHardenedFlag = 0x80000000u;
 constexpr size_t kPrivateKeyBytes = 32;
 constexpr size_t kPublicKeyBytes = 33;  // compressed: 02/03 || X
+constexpr size_t kUncompressedPublicKeyBytes = 65;  // 04 || X || Y
 constexpr size_t kChainCodeBytes = 32;
 constexpr size_t kMinSeedBytes = 16;  // 128 bits, BIP-32 minimum
 constexpr size_t kMaxSeedBytes = 64;  // 512 bits, BIP-32 maximum (BIP-39 seed size)
@@ -58,6 +59,10 @@ bool toPublic(const ExtendedPrivateKey* priv, ExtendedPublicKey* out_pub);
 
 // Compressed public key point(k) for a private key k in [1, n).
 bool privateToPublicKey(const uint8_t priv[kPrivateKeyBytes], uint8_t pub_out[kPublicKeyBytes]);
+
+// Expands a compressed public key to 04 || X || Y, recovering Y on the curve.
+// Fails (zeroing pub_out) if the prefix is not 02/03 or X is not on secp256k1.
+bool decompressPublicKey(const uint8_t pub[kPublicKeyBytes], uint8_t pub_out[kUncompressedPublicKeyBytes]);
 
 // Key identifier fingerprint: first 4 bytes of HASH160(pub), big-endian.
 bool fingerprint(const uint8_t pub[kPublicKeyBytes], uint32_t* out_fingerprint);

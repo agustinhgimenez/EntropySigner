@@ -18,7 +18,9 @@ namespace {
 constexpr size_t kHmacBytes = 64;  // HMAC-SHA512 output: I_L || I_R
 constexpr size_t kIndexBytes = 4;
 constexpr size_t kCkdDataBytes = kPublicKeyBytes + kIndexBytes;  // serP(K) || ser32(i), or 0x00 || ser256(k) || ser32(i)
-constexpr size_t kUncompressedBytes = 1 + 2 * kPrivateKeyBytes;  // 04 || X || Y
+constexpr size_t kUncompressedBytes = kUncompressedPublicKeyBytes;
+
+static_assert(1 + 2 * kPrivateKeyBytes == kUncompressedBytes, "uncompressed key is 04 || X || Y");
 
 static_assert(kPrivateKeyBytes + kChainCodeBytes == kHmacBytes, "I splits into key and chain code");
 static_assert(1 + kPrivateKeyBytes == kPublicKeyBytes, "hardened data has the same length as normal data");
@@ -343,6 +345,26 @@ bool privateToPublicKey(const uint8_t priv[kPrivateKeyBytes], uint8_t pub_out[kP
         security::secureMemzero(pub_out, kPublicKeyBytes);
     }
     security::secureMemzero(pub, sizeof(pub));
+    return ok;
+}
+
+bool decompressPublicKey(const uint8_t pub[kPublicKeyBytes], uint8_t pub_out[kUncompressedPublicKeyBytes]) {
+    if (pub_out == nullptr) {
+        return false;
+    }
+    Secp256k1 curve;
+    Point q;
+    uint8_t buf[kUncompressedBytes];
+    size_t written = 0;
+    const bool ok = pub != nullptr && curve.ok() && parsePublicKey(curve, pub, &q.v) &&
+                    mbedtls_ecp_point_write_binary(curve.grp(), &q.v, MBEDTLS_ECP_PF_UNCOMPRESSED, &written, buf,
+                                                   sizeof(buf)) == 0 &&
+                    written == kUncompressedBytes;
+    if (ok) {
+        memcpy(pub_out, buf, kUncompressedBytes);
+    } else {
+        memset(pub_out, 0, kUncompressedBytes);
+    }
     return ok;
 }
 
