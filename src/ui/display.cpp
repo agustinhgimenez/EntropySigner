@@ -35,14 +35,18 @@ DisplayStatus begin() {
     status.touch_detected = probeTouchController();
 #if ES_HAS_DISPLAY
     static LgfxDevice lcd(status.touch_detected);
-    g_lcd = &lcd;
     status.display_enabled = lcd.init();
     if (status.display_enabled) {
+        g_lcd = &lcd;
         lcd.setRotation(0);
         lcd.setBrightness(200);
     }
 #endif
     return status;
+}
+
+LgfxDevice* device() {
+    return g_lcd;
 }
 
 void showBootScreen(const DisplayStatus& status) {
