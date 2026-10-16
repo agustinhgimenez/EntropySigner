@@ -1,0 +1,21 @@
+---
+description: Commit and push every change to the repo automatically
+alwaysApply: true
+---
+
+# Auto-commit
+
+The user asked for an automatic commit every time the project is modified.
+
+At the end of every task that changes files in this repo:
+
+1. Check `git status --short` and stage only the files you changed for that task (`git add <paths>`).
+   Never stage `.pio/`, build outputs, captures, temporary harnesses or anything that looks like a secret.
+2. Commit with a Conventional Commits message in English, matching the history:
+   `feat(scope): ...`, `fix(scope): ...`, `docs: ...`, `refactor(scope): ...`, `chore: ...`.
+   Add a short body when the subject is not enough. One commit per logical change.
+3. Push to `origin main` (`git push origin main`).
+4. Tell the user, in Spanish, the commit hash and message.
+
+Do not commit if the build or the tests you ran for that change are failing; tell the user instead.
+Do not amend or force-push existing commits.
