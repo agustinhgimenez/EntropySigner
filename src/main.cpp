@@ -4,6 +4,7 @@
 
 #include "config/build_config.h"
 #include "security/secure_log.h"
+#include "system/demo_console.h"
 #include "system/device_info.h"
 #include "ui/display.h"
 #include "ui/wallet_ui.h"
@@ -30,6 +31,7 @@ void setup() {
 }
 
 void loop() {
+    es::system::pollDemoConsole();
     es::ui::updateWallet();
     delay(5);
 }
