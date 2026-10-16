@@ -277,10 +277,10 @@ reactivar). `CORE_DEBUG_LEVEL=0` silencia además los logs del core de Arduino.
 
 ```
 entropy (256 bits) = SHA-256( "EntropySigner/entropy-pool/v1"   29 B  domain tag
-                            ‖ RNG_HW                             32 B  esp_fill_random + SAR ADC
+                            ‖ RNG_HW                             64 B  esp_fill_random + SAR ADC
                             ‖ include_ldr                         1 B  0x00 / 0x01
                             ‖ LDR[0..127]                       256 B  uint16 little-endian )
-n_in = 2544 bits  →  n_out = 256 bits
+n_in = 2800 bits  →  n_out = 256 bits
 ```
 
 | Decisión | Justificación |

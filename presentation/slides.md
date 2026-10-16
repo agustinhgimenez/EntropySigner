@@ -99,7 +99,7 @@ dispositivo que nunca se conecta a la red?
 ```
 LDR ──► ADC (128 muestras) ─┐
                             ├──► SHA-256(tag ‖ RNG ‖ flag ‖ LDR) ──► 256 bits
-ESP32 HW RNG (32 B) ────────┘     (SAR ADC como fuente de ruido)
+ESP32 HW RNG (64 B) ────────┘     (SAR ADC como fuente de ruido)
 ```
 
 - **Fuente principal: RNG de hardware.** Sin radio, el RNG del ESP32-S3 es sólo

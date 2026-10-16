@@ -70,9 +70,9 @@ HEALTH_ALPHA_LOG2 = 20  # false-positive rate alpha = 2^-20 (SP 800-90B 4.4 reco
 MAX_LAG = 10
 
 # Firmware conditioning (src/entropy/entropy_pool.cpp):
-#   SHA-256(domain tag || HW RNG 32 B || include_ldr flag 1 B || 128 LDR samples x uint16)
+#   SHA-256(domain tag || HW RNG 64 B || include_ldr flag 1 B || 128 LDR samples x uint16)
 FW_DOMAIN_TAG = b"EntropySigner/entropy-pool/v1"
-FW_RNG_BYTES = 32
+FW_RNG_BYTES = 64
 FW_LDR_SAMPLES = 128
 FW_N_IN_BITS = 8 * (len(FW_DOMAIN_TAG) + FW_RNG_BYTES + 1 + 2 * FW_LDR_SAMPLES)
 SHA256_BITS = 256
@@ -707,14 +707,14 @@ def print_conditioning(ldr_h: Optional[float]) -> None:
     print(f"  salida:  n_out = {SHA256_BITS} bits, ancho interno nw = {SHA256_BITS} (SHA-256, FIPS 180-4)")
     print("  h_out segun SP 800-90B 3.1.5.1.2 (componente de acondicionamiento aprobado):")
     rows: List[Tuple[str, float]] = [
-        ("RNG HW a entropia completa, LDR acreditado en 0 (politica)", 256.0),
+        (f"RNG HW a entropia completa ({FW_RNG_BYTES} B), LDR acreditado en 0 (politica)", 8.0 * FW_RNG_BYTES),
+        ("RNG HW con solo 256 bits efectivos, sin margen", 256.0),
         ("RNG HW con solo 128 bits efectivos, LDR en 0", 128.0),
-        ("RNG HW a entropia completa + 64 bits de margen (criterio SP 800-90C)", 320.0),
     ]
     if ldr_h is not None:
         ldr_total = FW_LDR_SAMPLES * ldr_h
         rows.append((f"RNG HW completo + LDR medido ({FW_LDR_SAMPLES} x {ldr_h:.3f} = {ldr_total:.1f} bits)",
-                     256.0 + ldr_total))
+                     8.0 * FW_RNG_BYTES + ldr_total))
         rows.append(("RNG HW comprometido, solo LDR medido (optimista: sin atacante, NO acreditado)", ldr_total))
     rows.append(("RNG HW comprometido y LDR saturado por el atacante", 0.0))
     for label, h_in in rows:
@@ -741,7 +741,7 @@ CONCLUSIONS = """\
 
  3. Por que el acondicionador SHA-256 es imprescindible. Ninguna fuente fisica
     entrega bits uniformes e independientes; SHA-256 actua como extractor:
-    comprime n_in = 2544 bits de entrada parcialmente impredecible en 256 bits
+    comprime n_in = 2800 bits de entrada parcialmente impredecible en 256 bits
     casi uniformes, y combina las fuentes de modo que la salida es impredecible
     si al menos una de ellas lo es (siempre que el atacante no controle una con
     conocimiento de la otra). SP 800-90B 3.1.5.1.1 lo admite como componente de

@@ -17,7 +17,7 @@ Por ello, el firmware le asigna **crédito de entropía 0**. Toda la seguridad d
 ### P2: ¿Por qué SHA-256 no puede "crear" entropía?
 **R:** Por el principio de conservación de la información y la desigualdad fundamental de Rényi/Shannon: la entropía de la salida de una función determinística está acotada superiormente por la entropía de la entrada:
 $$H_{\min}(\text{salida}) \le \min(256, H_{\min}(\text{entrada}))$$
-SHA-256 actúa como un **acondicionador/extractor de entropía aprobado por NIST SP 800-90B (§3.1.5.1)**: comprime 2544 bits de entrada con correlación y sesgo en un bloque uniforme e impredecible de 256 bits, destruyendo dependencias estadísticas, pero si la entrada carece de entropía real (ej. un contador predecible), la salida es matemáticamente determinística.
+SHA-256 actúa como un **acondicionador/extractor de entropía aprobado por NIST SP 800-90B (§3.1.5.1)**: comprime 2800 bits de entrada con correlación y sesgo en un bloque uniforme e impredecible de 256 bits, destruyendo dependencias estadísticas, pero si la entrada carece de entropía real (ej. un contador predecible), la salida es matemáticamente determinística.
 
 ---
 

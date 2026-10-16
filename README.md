@@ -389,7 +389,7 @@ hardware (fuente principal) con el LDR (fuente adicional).
   fuente de ruido físico**. Sin radio encendida, el RNG del ESP32-S3 sería sólo
   pseudoaleatorio.
 - `entropy/entropy_pool`: `generateEntropy256()` calcula
-  `SHA-256("EntropySigner/entropy-pool/v1" ‖ RNG 32 B ‖ flag ‖ 128 muestras LDR)`.
+  `SHA-256("EntropySigner/entropy-pool/v1" ‖ RNG 64 B ‖ flag ‖ 128 muestras LDR)`.
   El LDR se muestrea **antes** que el RNG: el SAR ADC no puede atender a la vez
   al RNG y al driver ADC, y además así un atacante que controle la luz no puede
   adaptarla a la salida del RNG.
