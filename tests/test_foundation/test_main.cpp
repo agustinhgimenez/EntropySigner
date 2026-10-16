@@ -11,6 +11,17 @@ void setUp() {}
 void tearDown() {}
 
 void test_pin_rules_reject_reserved_pins() {
+#if defined(ES_BOARD_ESP32_DEVKIT)
+    TEST_ASSERT_FALSE(es::pins::isSafeGpio(0));   // strapping
+    TEST_ASSERT_FALSE(es::pins::isSafeGpio(12));  // strapping (flash voltage)
+    TEST_ASSERT_FALSE(es::pins::isSafeGpio(1));   // UART0 TX
+    TEST_ASSERT_FALSE(es::pins::isSafeGpio(3));   // UART0 RX
+    TEST_ASSERT_FALSE(es::pins::isSafeGpio(9));   // internal flash
+    TEST_ASSERT_FALSE(es::pins::isSafeGpio(20));  // does not exist
+    TEST_ASSERT_FALSE(es::pins::isSafeOutput(34));  // input-only
+    TEST_ASSERT_TRUE(es::pins::isSafeGpio(34));
+    TEST_ASSERT_TRUE(es::pins::isSafeGpio(23));
+#else
     TEST_ASSERT_FALSE(es::pins::isSafeGpio(0));   // strapping
     TEST_ASSERT_FALSE(es::pins::isSafeGpio(46));  // strapping
     TEST_ASSERT_FALSE(es::pins::isSafeGpio(19));  // USB D-
@@ -19,6 +30,7 @@ void test_pin_rules_reject_reserved_pins() {
     TEST_ASSERT_FALSE(es::pins::isSafeGpio(30));  // flash / PSRAM
     TEST_ASSERT_TRUE(es::pins::isSafeGpio(1));
     TEST_ASSERT_TRUE(es::pins::isSafeGpio(12));
+#endif
 }
 
 void test_board_pins_are_safe_and_unique() {
@@ -45,8 +57,12 @@ void test_build_identity() {
 #endif
 }
 
-void test_chip_is_esp32s3() {
+void test_chip_model() {
+#if defined(ES_BOARD_ESP32_DEVKIT)
+    TEST_ASSERT_EQUAL_STRING_LEN("ESP32-D0WD", ESP.getChipModel(), 10);  // D0WDQ6 or D0WD-V3
+#else
     TEST_ASSERT_EQUAL_STRING("ESP32-S3", ESP.getChipModel());
+#endif
 }
 
 void setup() {
@@ -56,7 +72,7 @@ void setup() {
     RUN_TEST(test_board_pins_are_safe_and_unique);
     RUN_TEST(test_ldr_is_on_adc1);
     RUN_TEST(test_build_identity);
-    RUN_TEST(test_chip_is_esp32s3);
+    RUN_TEST(test_chip_model);
     UNITY_END();
 }
 

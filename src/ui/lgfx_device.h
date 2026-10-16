@@ -14,7 +14,11 @@ public:
     explicit LgfxDevice(bool with_touch) {
         {
             auto cfg = bus_.config();
+#if defined(ES_BOARD_ESP32_DEVKIT)
+            cfg.spi_host = SPI3_HOST;  // VSPI
+#else
             cfg.spi_host = SPI2_HOST;
+#endif
             cfg.spi_mode = 0;
             cfg.freq_write = board::kDisplaySpiWriteHz;
             cfg.freq_read = board::kDisplaySpiReadHz;
