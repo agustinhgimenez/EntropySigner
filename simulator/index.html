@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EntropySigner - Simulador de pantalla</title>
+    <style>
+        :root {
+            --bg: #0b0f14;
+            --surface: #121820;
+            --card: #18222d;
+            --border: #243444;
+            --text: #e6edf3;
+            --muted: #8b98a5;
+            --cyan: #00e5ff;
+            --green: #00ff9c;
+            --amber: #ffc857;
+            --red: #ff5370;
+            --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: radial-gradient(circle at 30% 20%, #132030 0%, var(--bg) 60%);
+            color: var(--text);
+            font-family: "Segoe UI", system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+        header h1 { font-size: 22px; letter-spacing: 2px; color: var(--cyan); }
+        header p { color: var(--muted); font-size: 14px; }
+        .lab-link {
+            margin-left: auto; color: var(--bg); background: var(--cyan); text-decoration: none;
+            font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px;
+        }
+        .inspector a { color: var(--cyan); font-size: 13px; }
+        .badge {
+            font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 4px;
+            border: 1px solid var(--amber); color: var(--amber);
+        }
+
+        main { display: grid; grid-template-columns: auto minmax(380px, 1fr); gap: 28px; align-items: start; }
+        @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+        /* ------------------------------------------------ device mockup --- */
+        .device {
+            background: linear-gradient(160deg, #1c2733, #0e151c);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 26px 22px 22px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .05);
+            width: fit-content;
+        }
+        .bezel {
+            background: #05080b;
+            padding: 14px;
+            border-radius: 10px;
+            border: 1px solid #2a3846;
+        }
+        canvas#lcd {
+            display: block;
+            width: 320px;
+            height: 480px;
+            cursor: pointer;
+            image-rendering: pixelated;
+            touch-action: none;
+        }
+        .device-footer {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-top: 16px; font-family: var(--mono); font-size: 11px; color: var(--muted);
+        }
+        .hw-buttons { display: flex; gap: 10px; }
+        .hw-btn {
+            width: 46px; height: 26px; border-radius: 6px; border: 1px solid #3a4b5c;
+            background: #0d141b; color: var(--muted); font-family: var(--mono); font-size: 10px; cursor: pointer;
+        }
+        .hw-btn:hover { color: var(--text); border-color: var(--cyan); }
+        .led { width: 8px; height: 8px; border-radius: 50%; background: #ff3b3b; box-shadow: 0 0 8px #ff3b3b; display: inline-block; margin-right: 6px; }
+
+        /* ------------------------------------------------------ panels --- */
+        .panels { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .panel h2 {
+            font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted);
+            margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+
+        .state { font-family: var(--mono); font-size: 18px; color: var(--cyan); }
+        .timeout { font-family: var(--mono); font-size: 12px; color: var(--amber); }
+
+        .ldr-box { display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center; }
+        .sensor {
+            width: 120px; height: 120px; border-radius: 12px; position: relative;
+            background: radial-gradient(circle, #2b3a48 0%, #121a22 70%);
+            border: 1px dashed #3a4b5c; cursor: grab; overflow: hidden;
+        }
+        .sensor .ldr {
+            position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; transform: translate(-50%, -50%);
+            border-radius: 50%; background: radial-gradient(circle, #f5d77a 0%, #c9893a 60%, #6b4a1f 100%);
+            box-shadow: 0 0 calc(var(--glow, .6) * 30px) rgba(255, 220, 120, calc(var(--glow, .6)));
+        }
+        .sensor .ldr::after {
+            content: ""; position: absolute; inset: 6px; border-radius: 50%;
+            background: repeating-linear-gradient(90deg, transparent 0 3px, rgba(120, 40, 20, .7) 3px 5px);
+        }
+        .sensor .shade {
+            position: absolute; inset: 0; background: rgba(0, 0, 0, var(--shade, 0)); pointer-events: none;
+            transition: background .08s;
+        }
+        .sensor small { position: absolute; bottom: 6px; width: 100%; text-align: center; font-size: 10px; color: var(--muted); }
+        label { font-size: 13px; color: var(--muted); }
+        input[type=range] { width: 100%; accent-color: var(--cyan); }
+        .readout { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
+        .readout b { color: var(--cyan); }
+
+        .toggles { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 4px; }
+        .toggles label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+
+        button.action {
+            background: transparent; border: 1px solid var(--cyan); color: var(--cyan);
+            padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+        }
+        button.action:hover { background: rgba(0, 229, 255, .08); }
+
+        .serial {
+            background: #05080b; border: 1px solid #1b2733; border-radius: 8px; height: 220px; overflow-y: auto;
+            font-family: var(--mono); font-size: 12px; line-height: 1.5; padding: 10px; color: #c9d4de;
+            white-space: pre-wrap; word-break: break-all;
+        }
+        .muted { color: var(--muted); }
+        .device-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+        .dev-status { font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid; }
+        .dev-status.sim { color: var(--amber); border-color: rgba(255, 200, 87, .4); }
+        .dev-status.real { color: var(--green); border-color: rgba(0, 255, 156, .4); }
+        .dev-status.err { color: var(--red); border-color: rgba(255, 83, 112, .4); }
+        .serial .dev { color: #9fe8ff; }
+        .serial .ok { color: var(--green); }
+        .serial .fail { color: var(--red); }
+        .serial .sys { color: var(--muted); }
+
+        .inspector dl { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; font-size: 12px; }
+        .inspector dt { color: var(--muted); }
+        .inspector dd { font-family: var(--mono); word-break: break-all; color: var(--text); }
+        .inspector dd.secret { color: var(--amber); }
+        .inspector dd.wiped { color: var(--muted); font-style: italic; }
+        .warn { font-size: 12px; color: var(--amber); margin-bottom: 10px; line-height: 1.4; }
+        .empty { color: var(--muted); font-size: 13px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>ENTROPYSIGNER</h1>
+        <p>Simulador de la pantalla ST7796S 320&times;480 &middot; mismo flujo y criptograf&iacute;a que el firmware</p>
+        <span class="badge">SIMULACI&Oacute;N &middot; NO USAR CON FONDOS REALES</span>
+        <a class="lab-link" id="lab-link" href="laboratorio.html" target="_blank">Laboratorio criptogr&aacute;fico: qu&eacute; pasa por dentro &rarr;</a>
+    </header>
+
+    <main>
+        <section>
+            <div class="device">
+                <div class="bezel">
+                    <canvas id="lcd" width="320" height="480" aria-label="Pantalla simulada; hac&eacute; clic para tocar"></canvas>
+                </div>
+                <div class="device-footer">
+                    <span><span class="led"></span>ESP32 DevKit V1</span>
+                    <div class="hw-buttons">
+                        <button class="hw-btn" id="btn-en" title="Reinicia la placa (bot&oacute;n EN/RST)">EN</button>
+                        <button class="hw-btn" title="Sin funci&oacute;n en el firmware">BOOT</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panels">
+            <div class="panel">
+                <h2>Estado del firmware <span class="timeout" id="timeout"></span></h2>
+                <div class="state" id="state">BOOT</div>
+                <div class="toggles">
+                    <label><input type="checkbox" id="touch" checked> Touch FT6336U conectado</label>
+                    <label><input type="checkbox" id="demo" checked> Compilado en modo DEMO</label>
+                </div>
+                <div class="device-row">
+                    <button class="action" id="connect">Conectar ESP32 real (USB)</button>
+                    <span id="dev-status" class="dev-status sim"><b>ESP32 no conectada</b></span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Sensor de luz (LDR en GPIO34) <span id="ldr-mode" class="muted"></span></h2>
+                <div class="ldr-box">
+                    <div class="sensor" id="sensor" title="Pas&aacute; el mouse por encima: es tu mano tapando el sensor">
+                        <div class="ldr"></div>
+                        <div class="shade"></div>
+                        <small>pas&aacute; la mano</small>
+                    </div>
+                    <div>
+                        <label for="light">Luz ambiente</label>
+                        <input type="range" id="light" min="0" max="100" value="60">
+                        <div class="readout">
+                            <span id="lux">-</span> lux &middot; R<sub>LDR</sub> <span id="rldr">-</span> &middot;
+                            ADC <b id="adc">-</b> / 4095
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Monitor serie (115200 baud) <button class="action" id="selftest">Verificar criptograf&iacute;a</button></h2>
+                <div class="serial" id="serial"></div>
+            </div>
+
+            <div class="panel inspector">
+                <h2>Inspector interno</h2>
+                <p class="warn">Solo existe en el simulador: el firmware real nunca muestra la entrop&iacute;a ni la seed,
+                    y las borra de la RAM apenas las usa. Ac&aacute; se conservan para explicar cada paso.</p>
+                <div id="inspector"><p class="empty">Gener&aacute; una wallet para ver los valores intermedios.</p></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="vendor/qrcode.js"></script>
+    <script src="wordlist.js"></script>
+    <script src="crypto.js"></script>
+    <script src="device.js"></script>
+    <script src="firmware.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EntropySigner - Laboratorio criptografico</title>
+    <style>
+        :root {
+            --bg: #0b0f14;
+            --surface: #121820;
+            --card: #18222d;
+            --border: #243444;
+            --text: #e6edf3;
+            --muted: #8b98a5;
+            --cyan: #00e5ff;
+            --green: #00ff9c;
+            --amber: #ffc857;
+            --red: #ff5370;
+            --violet: #b48cff;
+            --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: radial-gradient(circle at 20% 0%, #132030 0%, var(--bg) 55%);
+            color: var(--text);
+            font-family: "Segoe UI", system-ui, sans-serif;
+            line-height: 1.55;
+        }
+
+        header {
+            position: sticky; top: 0; z-index: 10;
+            background: rgba(11, 15, 20, .92); backdrop-filter: blur(6px);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 28px;
+            display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+        }
+        header h1 { font-size: 18px; letter-spacing: 2px; color: var(--cyan); }
+        header a { color: var(--muted); font-size: 13px; }
+        header .controls { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+        nav.toc {
+            position: fixed; top: 80px; left: 20px; width: 210px; font-size: 13px;
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        nav.toc a { color: var(--muted); text-decoration: none; padding: 3px 8px; border-left: 2px solid transparent; }
+        nav.toc a:hover { color: var(--text); border-left-color: var(--cyan); }
+        @media (max-width: 1250px) { nav.toc { display: none; } main { margin-left: auto !important; } }
+
+        main { max-width: 980px; margin: 24px auto 80px 260px; padding: 0 20px; display: flex; flex-direction: column; gap: 22px; }
+
+        section.step {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px;
+        }
+        section.step > h2 { font-size: 19px; display: flex; gap: 12px; align-items: baseline; margin-bottom: 6px; }
+        section.step > h2 .n {
+            font-family: var(--mono); font-size: 13px; color: var(--bg); background: var(--cyan);
+            border-radius: 6px; padding: 1px 8px;
+        }
+        .lead { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+        .lead b, .lead code { color: var(--text); }
+        code, .mono { font-family: var(--mono); font-size: 12.5px; }
+        h3 { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 18px 0 8px; }
+
+        .kv { display: grid; grid-template-columns: 210px 1fr; gap: 6px 14px; font-size: 13px; align-items: baseline; }
+        .kv dt { color: var(--muted); }
+        .kv dd { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+
+        .hex { font-family: var(--mono); font-size: 12.5px; word-break: break-all; color: var(--text); }
+        .secret { color: var(--amber); }
+        .pub { color: var(--cyan); }
+        .ok { color: var(--green); }
+        .bad { color: var(--red); }
+        .muted { color: var(--muted); }
+
+        .formula {
+            background: #0a1016; border: 1px solid #1b2733; border-left: 3px solid var(--violet);
+            border-radius: 8px; padding: 10px 14px; font-family: var(--mono); font-size: 13px; margin: 10px 0;
+            white-space: pre-wrap; color: #d8c7ff;
+        }
+        .note {
+            background: rgba(255, 200, 87, .07); border: 1px solid rgba(255, 200, 87, .3); border-radius: 8px;
+            padding: 10px 14px; font-size: 13px; color: #f3dfae; margin: 10px 0;
+        }
+
+        .origin {
+            border-radius: 12px; padding: 14px 18px; font-size: 14px; border: 1px solid var(--border); background: var(--card);
+        }
+        .origin.imported { border-color: var(--green); background: rgba(0, 255, 156, .06); }
+        .origin.local { border-color: var(--amber); background: rgba(255, 200, 87, .06); }
+        .origin b { font-family: var(--mono); }
+
+        button, .btn {
+            background: transparent; border: 1px solid var(--cyan); color: var(--cyan);
+            padding: 7px 14px; border-radius: 7px; font-size: 13px; cursor: pointer; font-family: inherit;
+        }
+        button:hover { background: rgba(0, 229, 255, .08); }
+        button.primary { background: var(--cyan); color: var(--bg); font-weight: 600; }
+        button.primary:hover { background: #5af0ff; }
+        input[type=text], textarea, select {
+            background: #0a1016; border: 1px solid var(--border); border-radius: 7px; color: var(--text);
+            padding: 7px 10px; font-family: var(--mono); font-size: 12.5px;
+        }
+        textarea { width: 100%; resize: vertical; min-height: 70px; }
+        .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+
+        /* byte layout bar */
+        .layout { display: flex; height: 34px; border-radius: 6px; overflow: hidden; font-size: 11.5px; font-family: var(--mono); margin: 8px 0 4px; }
+        .layout div { display: flex; align-items: center; justify-content: center; color: #071016; white-space: nowrap; overflow: hidden; padding: 0 4px; }
+
+        /* BIP-39 bit table */
+        table { border-collapse: collapse; width: 100%; font-size: 13px; }
+        th, td { padding: 5px 8px; border-bottom: 1px solid #1d2a37; text-align: left; vertical-align: middle; }
+        th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+        td.num { font-family: var(--mono); text-align: right; }
+        .bits { font-family: var(--mono); letter-spacing: 1.5px; }
+        .bits .e { color: var(--cyan); }
+        .bits .c { color: var(--amber); font-weight: 700; }
+        .word { font-family: var(--mono); font-weight: 700; color: var(--text); }
+        .words-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+        .candidate {
+            border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-family: var(--mono); font-size: 12.5px;
+        }
+        .candidate.current { border-color: var(--green); box-shadow: 0 0 0 1px var(--green) inset; }
+        .candidate b { display: block; font-size: 14px; color: var(--text); }
+
+        /* bit grids */
+        .bitgrid { display: grid; grid-template-columns: repeat(64, 1fr); gap: 1px; margin: 8px 0; }
+        .bitgrid span { aspect-ratio: 1; border-radius: 1px; background: #1c2833; }
+        .bitgrid span.one { background: var(--cyan); }
+        .bitgrid span.flip { background: var(--red); }
+        .bitgrid span.same { background: #1c2833; }
+
+        svg.spark { width: 100%; height: 90px; background: #0a1016; border: 1px solid #1b2733; border-radius: 8px; }
+
+        .stats td.v { font-family: var(--mono); }
+        .pill { font-size: 11px; padding: 2px 7px; border-radius: 10px; border: 1px solid; white-space: nowrap; }
+        .pill.ok { border-color: var(--green); }
+        .pill.bad { border-color: var(--red); }
+        .pill.warn { border-color: var(--amber); color: var(--amber); }
+
+        .eip55 span { font-family: var(--mono); font-size: 15px; display: inline-block; text-align: center; width: 15px; }
+        .eip55 span small { display: block; font-size: 10px; color: var(--muted); }
+        .eip55 span.up { color: var(--amber); font-weight: 700; }
+
+        .pipeline { display: flex; flex-direction: column; gap: 0; }
+        .pipeline .stage { display: grid; grid-template-columns: 230px 1fr; gap: 14px; padding: 8px 0; border-bottom: 1px dashed #1d2a37; font-size: 13px; }
+        .pipeline .stage .op { color: var(--violet); font-family: var(--mono); font-size: 12.5px; }
+        .big { font-size: 26px; font-family: var(--mono); color: var(--green); }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+        .card .t { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>LABORATORIO CRIPTOGR&Aacute;FICO</h1>
+        <a href="index.html">&larr; volver al simulador de pantalla</a>
+        <div class="controls">
+            <select id="source" title="Origen de la entropia" autocomplete="off">
+                <option value="imported" id="opt-imported" hidden>Wallet del simulador de pantalla</option>
+                <option value="esp32">Nueva: ESP32 real por USB</option>
+                <option value="new">Nueva: RNG + LDR simulado</option>
+                <option value="zero">Vector de prueba: entrop&iacute;a 0x00&hellip;00</option>
+                <option value="manual">Entrop&iacute;a manual (64 hex)</option>
+            </select>
+            <input type="text" id="manual" placeholder="64 caracteres hex" size="30" style="display:none">
+            <input type="text" id="passphrase" placeholder="passphrase BIP-39 (opcional)" size="22">
+            <button class="primary" id="run">Generar y explicar</button>
+            <button id="connect">Conectar ESP32</button>
+            <span id="dev-status" class="muted"></span>
+        </div>
+    </header>
+
+    <nav class="toc">
+        <a href="#s1">1. Fuentes de entrop&iacute;a</a>
+        <a href="#s2">2. Acondicionamiento SHA-256</a>
+        <a href="#s3">3. Calidad de la entrop&iacute;a</a>
+        <a href="#s4">4. BIP-39: bits &rarr; palabras</a>
+        <a href="#s5">5. Las 8 &uacute;ltimas palabras v&aacute;lidas</a>
+        <a href="#s6">6. Validar una frase</a>
+        <a href="#s7">7. PBKDF2: frase &rarr; seed</a>
+        <a href="#s8">8. BIP-32: master key</a>
+        <a href="#s9">9. Derivaci&oacute;n BIP-44</a>
+        <a href="#s10">10. secp256k1: clave p&uacute;blica</a>
+        <a href="#s11">11. Direcci&oacute;n Bitcoin</a>
+        <a href="#s12">12. Direcci&oacute;n Ethereum</a>
+        <a href="#s13">13. &iquest;Por qu&eacute; es seguro?</a>
+    </nav>
+
+    <main>
+        <div id="origin" class="origin"></div>
+
+        <section class="step" id="s1">
+            <h2><span class="n">1</span> Fuentes de entrop&iacute;a</h2>
+            <p class="lead">El firmware junta dos fuentes f&iacute;sicas. La <b>principal</b> es el generador de n&uacute;meros
+                aleatorios por hardware del ESP32 (<code>esp_fill_random</code>, ruido del conversor anal&oacute;gico-digital y
+                del reloj). La <b>adicional</b> son 128 lecturas del sensor de luz (LDR). Al LDR se le acreditan
+                <b>0 bits</b>: un atacante con una linterna lo puede controlar, as&iacute; que solo suma defensa en profundidad.</p>
+            <div id="out-sources" class="muted">Presion&aacute; &laquo;Generar y explicar&raquo;.</div>
+        </section>
+
+        <section class="step" id="s2">
+            <h2><span class="n">2</span> Acondicionamiento con SHA-256</h2>
+            <p class="lead">Ninguna fuente f&iacute;sica da bits perfectamente uniformes. SHA-256 funciona como
+                <b>extractor</b>: comprime 2800 bits parcialmente impredecibles en 256 bits casi uniformes, y la salida es
+                impredecible si <b>al menos una</b> fuente lo es (NIST SP 800-90B &sect;3.1.5).</p>
+            <div id="out-conditioning" class="muted">&mdash;</div>
+        </section>
+
+        <section class="step" id="s3">
+            <h2><span class="n">3</span> &iquest;Tiene buena entrop&iacute;a? Pruebas estad&iacute;sticas</h2>
+            <p class="lead">Se comparan cuatro fuentes con las mismas pruebas que usa
+                <code>tools/entropy_analysis/analyze_entropy.py</code>. Para generar claves importa la
+                <b>min-entrop&iacute;a</b> (&minus;log<sub>2</sub> de la probabilidad del valor m&aacute;s com&uacute;n): mide cu&aacute;nto le cuesta a
+                un atacante adivinar empezando por lo m&aacute;s probable.</p>
+            <div class="row">
+                <label class="muted" for="nsamples">Muestras por fuente</label>
+                <select id="nsamples">
+                    <option value="50000">50.000</option>
+                    <option value="200000" selected>200.000</option>
+                    <option value="1000000">1.000.000 (NIST)</option>
+                </select>
+                <button id="run-stats">Correr pruebas</button>
+                <span id="stats-status" class="muted"></span>
+            </div>
+            <p class="muted" style="font-size:13px">Con la ESP32 conectada se agregan dos filas con datos <b>reales</b> de la placa
+                (hasta 20.000 bytes del RNG y 10.000 lecturas del ADC, porque el USB a 115200 baudios transfiere ~5 KB/s).</p>
+            <div id="out-stats"></div>
+        </section>
+
+        <section class="step" id="s4">
+            <h2><span class="n">4</span> BIP-39: de 256 bits a 24 palabras</h2>
+            <p class="lead">La lista oficial tiene 2048 = 2<sup>11</sup> palabras, as&iacute; que cada palabra codifica
+                <b>11 bits</b>. A los 256 bits de entrop&iacute;a se les agrega un <b>checksum</b> de 256/32 = <b>8 bits</b>, que son
+                los primeros 8 bits de SHA-256(entrop&iacute;a). Total 264 bits = 24 &times; 11.</p>
+            <div class="formula">ENT = 256 bits    CS = ENT / 32 = 8 bits    MS = (ENT + CS) / 11 = 24 palabras
+checksum = primeros 8 bits de SHA-256(entrop&iacute;a)</div>
+            <div id="out-bip39" class="muted">&mdash;</div>
+        </section>
+
+        <section class="step" id="s5">
+            <h2><span class="n">5</span> Las 8 posibles &uacute;ltimas palabras</h2>
+            <p class="lead">La palabra 24 mezcla <b>3 bits de entrop&iacute;a</b> y los <b>8 bits de checksum</b>. Si fijamos las
+                primeras 23 palabras, solo hay 2<sup>3</sup> = <b>8</b> combinaciones de esos 3 bits, y cada una determina su
+                propio checksum. Por eso, de las 2048 palabras, solo <b>8 son v&aacute;lidas</b> como &uacute;ltima palabra
+                (2048 / 2<sup>8</sup> = 8).</p>
+            <div id="out-last" class="muted">&mdash;</div>
+        </section>
+
+        <section class="step" id="s6">
+            <h2><span class="n">6</span> Validar una frase (detecci&oacute;n de errores)</h2>
+            <p class="lead">Si al anotar las palabras te equivoc&aacute;s en una, el checksum deja de coincidir con
+                probabilidad 255/256. Prob&aacute; escribir o cambiar palabras.</p>
+            <textarea id="validate-input" placeholder="pega 12 o 24 palabras separadas por espacios"></textarea>
+            <div class="row">
+                <button id="validate">Validar</button>
+                <button id="corrupt">Cambiar una palabra al azar</button>
+            </div>
+            <div id="out-validate"></div>
+        </section>
+
+        <section class="step" id="s7">
+            <h2><span class="n">7</span> PBKDF2: de la frase a la seed</h2>
+            <p class="lead">La frase se convierte en una <b>seed de 512 bits</b> con PBKDF2-HMAC-SHA512 y
+                <b>2048 iteraciones</b>. Las iteraciones encarecen cada intento de fuerza bruta. La passphrase opcional
+                funciona como &laquo;palabra 25&raquo;: la misma frase con otra passphrase da una wallet totalmente distinta.</p>
+            <div class="formula">seed = PBKDF2(PRF = HMAC-SHA512, password = NFKD(frase),
+            salt = "mnemonic" + NFKD(passphrase), c = 2048, dkLen = 64 bytes)</div>
+            <div id="out-seed" class="muted">&mdash;</div>
+        </section>
+
+        <section class="step" id="s8">
+            <h2><span class="n">8</span> BIP-32: master key</h2>
+            <p class="lead">Un HMAC-SHA512 con la clave fija &laquo;Bitcoin seed&raquo; parte la seed en dos mitades: la
+                <b>clave privada maestra</b> (izquierda) y el <b>chain code</b> (derecha), que se usa para derivar hijos.</p>
+            <div class="formula">I = HMAC-SHA512(key = "Bitcoin seed", data = seed)
+k_master = I[0..31]  (debe cumplir 0 &lt; k &lt; n)      c_master = I[32..63]</div>
+            <div id="out-master" class="muted">&mdash;</div>
+        </section>
+
+        <section class="step" id="s9">
+            <h2><span class="n">9</span> Derivaci&oacute;n jer&aacute;rquica BIP-44</h2>
+            <p class="lead">Ruta <code>m / prop&oacute;sito' / moneda' / cuenta' / cambio / &iacute;ndice</code>. El ap&oacute;strofo indica
+                derivaci&oacute;n <b>endurecida</b> (&iacute;ndice &ge; 2<sup>31</sup>): usa la clave <b>privada</b> del padre, as&iacute;
+                que si se filtra una clave hija y la xpub del padre, igual no se puede reconstruir la privada del padre.</p>
+            <div class="formula">endurecida:  I = HMAC-SHA512(c_padre, 0x00 || k_padre || ser32(i))
+normal:      I = HMAC-SHA512(c_padre, serP(k_padre&middot;G) || ser32(i))
+k_hijo = (I[0..31] + k_padre) mod n        c_hijo = I[32..63]</div>
+            <div id="out-derive" class="muted">&mdash;</div>
+        </section>
+
+        <section class="step" id="s10">
+            <h2><span class="n">10</span> Curva el&iacute;ptica secp256k1: de privada a p&uacute;blica</h2>
+            <p class="lead">La clave p&uacute;blica es el punto <b>K = k&middot;G</b>: sumar el punto generador G consigo mismo k veces
+                sobre la curva. Ir de k a K es r&aacute;pido; volver de K a k es el <b>problema del logaritmo discreto</b>, que se
+                considera inviable para n &asymp; 2<sup>256</sup>.</p>
+            <div class="formula">curva:  y&sup2; = x&sup3; + 7   (mod p),   p = 2&sup2;&#8309;&#8310; &minus; 2&sup3;&sup2; &minus; 977
+K = k &middot; G      comprimida = (02 si y es par, 03 si es impar) || x</div>
+            <div id="out-pub" class="muted">&mdash;</div>
+        </section>
+
+        <section class="step" id="s11">
+            <h2><span class="n">11</span> Direcci&oacute;n Bitcoin (P2PKH, Base58Check)</h2>
+            <p class="lead">Se aplica <b>HASH160</b> (SHA-256 y despu&eacute;s RIPEMD-160) a la clave p&uacute;blica comprimida, se
+                antepone la versi&oacute;n 0x00 (red principal), se agrega un checksum de 4 bytes (doble SHA-256) y se codifica en
+                Base58, que evita caracteres confundibles como 0/O e I/l.</p>
+            <div id="out-btc" class="muted">&mdash;</div>
+        </section>
+
+        <section class="step" id="s12">
+            <h2><span class="n">12</span> Direcci&oacute;n Ethereum (Keccak-256 + EIP-55)</h2>
+            <p class="lead">Ethereum usa la clave p&uacute;blica <b>sin comprimir</b> (X || Y, 64 bytes), le aplica
+                <b>Keccak-256</b> y toma los &uacute;ltimos 20 bytes. El checksum EIP-55 no agrega caracteres: pone en
+                may&uacute;scula cada letra cuyo nibble en Keccak-256(direcci&oacute;n en min&uacute;sculas) sea &ge; 8.</p>
+            <div id="out-eth" class="muted">&mdash;</div>
+        </section>
+
+        <section class="step" id="s13">
+            <h2><span class="n">13</span> &iquest;Por qu&eacute; es seguro?</h2>
+            <div id="out-security"></div>
+        </section>
+    </main>
+
+    <script src="wordlist.js"></script>
+    <script src="crypto.js"></script>
+    <script src="device.js"></script>
+    <script src="laboratorio.js"></script>
+</body>
+</html>
