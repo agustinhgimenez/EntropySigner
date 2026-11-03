@@ -248,9 +248,9 @@ Se divide el flujo en **m secuencias** (nosotros: 80 secuencias de 100.000 bits 
 1. **Proporción:** la fracción de secuencias que pasan debe ser ≥ (1 − α) − 3·√(α(1−α)/m). Con m = 80: **≥ 0,9566, es decir, al menos 77 de 80**.
 2. **Uniformidad de los P-valores:** si la fuente es aleatoria, los P-valores se distribuyen uniformes entre 0 y 1. Se agrupan en 10 intervalos y un chi-cuadrado debe dar P ≥ 0,0001.
 
-### 5.5 El experimento: cinco generadores, las mismas pruebas
+### 5.5 El experimento: seis generadores, las mismas pruebas
 
-Pasamos 1 MB de cada generador por la batería:
+Pasamos 1 MB de cada generador por la batería. La primera fila es el RNG de nuestra ESP32, capturado por USB (sección 6):
 
 ![Resultados NIST SP 800-22](img/nist_tabla.png)
 
@@ -260,7 +260,7 @@ Pasamos 1 MB de cada generador por la batería:
 
 1. **El LCG (tipo `rand()` de C) falla las 10 pruebas.** Sus bits bajos tienen período corto: en la imagen se ven **rayas**. La fuente sesgada (52% de unos) falla 8 de 10. **Las pruebas sí detectan generadores malos.**
 2. **Mersenne Twister y SHA-256(contador) pasan las 10 pruebas**, y sin embargo **son 100% predecibles**: Mersenne Twister se reconstruye entero observando 624 salidas, y SHA-256(contador) es trivial para quien conozca el esquema. Milk Sad (2.4) usaba justamente Mersenne Twister.
-3. **`os.urandom`**, que sí es criptográficamente seguro, falló en esta corrida la prueba de Fourier (76/80, el mínimo es 77). Es el **1% de falsos positivos** de 5.2: con 10 pruebas a α = 0,01, que de vez en cuando falle una es lo esperable. Además la prueba espectral de SP 800-22 tiene un error conocido en su varianza (Kim et al. 2004; Pareschi et al. 2012) que la hace fallar algo más seguido.
+3. **El RNG real de la ESP32 y `os.urandom` pasan las 10 pruebas.** Pasar no es garantía de 10/10 en cada corrida: en una corrida anterior `os.urandom`, que es criptográficamente seguro, falló la prueba de Fourier (76/80, el mínimo es 77). Es el **1% de falsos positivos** de 5.2: con 10 pruebas a α = 0,01, que de vez en cuando falle una es lo esperable. Además la prueba espectral de SP 800-22 tiene un error conocido en su varianza (Kim et al. 2004; Pareschi et al. 2012) que la hace fallar algo más seguido. Lo que sí indicaría un problema es que la **misma** prueba falle en varias corridas.
 
 > **Las pruebas estadísticas pueden demostrar que un generador es malo, pero nunca que es bueno.** Un PRNG determinista pasa todo. Por eso la seguridad se apoya en una **fuente física justificada** (el diseño del RNG del ESP32, documentado por el fabricante) y las pruebas solo sirven para descartar fallas groseras.
 
@@ -334,15 +334,21 @@ python tools/entropy_analysis/analyze_entropy.py --file docs/estudio/data/esp32_
 python docs/estudio/generar_figuras.py
 ```
 
-### 6.3 Resultados de la ESP32 (completar después de la captura)
+### 6.3 Resultados de la ESP32
+
+ESP32-D0WD-V3 (DevKit V1), firmware DEMO con `bootloader_random_enable()` y 2 µs entre palabras; 1.000.000 de bytes capturados por USB en 3 minutos (`docs/estudio/data/esp32_rng.bin`).
 
 | Prueba | Resultado |
 |---|---|
-| SP 800-22: pruebas que pasan | _pendiente_ / 10 |
-| SP 800-90B MCV (bits por byte) | _pendiente_ |
-| Health tests | _pendiente_ |
+| SP 800-22: pruebas que pasan | **10 / 10** (peor caso: entropía aproximada 77/80, justo en el mínimo) |
+| SP 800-90B MCV (bits por byte) | **7,88** de 8 (p_max = 0,0042; el byte más frecuente es 74) |
+| SP 800-90B Lag Prediction | 7,97 bits por byte |
+| SP 800-90B H_I (mínimo de los estimadores) | 7,54 bits por byte (94% del máximo, igual que el CSPRNG de referencia) |
+| Chi-cuadrado sobre los 256 valores | p = 0,56 (no rechaza uniformidad) |
+| Autocorrelación, lags 1 a 10 | todas dentro de la banda del 99% (±0,0026) |
+| Health tests (Repetition Count y Adaptive Proportion) | **ok**, 0 fallas (racha máxima 3, corte 21) |
 
-**Qué esperar:** que pase las pruebas igual que `os.urandom`. Si fallara alguna de forma sistemática (por ejemplo, monobit o rachas en varias corridas), indicaría que la fuente de ruido no está activa o que se lee demasiado rápido.
+**Cómo leerlo:** la salida del RNG es indistinguible de un CSPRNG con estas pruebas, y no aparece ninguna de las fallas que buscábamos (sesgo, rachas, periodicidad, fuente trabada). Con el 94% medido, los 64 bytes que pide el firmware aportan unos 482 bits, muy por encima de los 256 + 64 que exige SP 800-90C para la salida de SHA-256. Como se explicó en 5.7, esto descarta fallas groseras pero **no certifica** la entropía: la salida de `RNG_DATA_REG` ya está procesada por el chip.
 
 ---
 

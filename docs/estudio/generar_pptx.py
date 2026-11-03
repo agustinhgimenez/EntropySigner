@@ -300,15 +300,15 @@ panel(s, Inches(6.8), Inches(1.6), Inches(5.9), Inches(4.6), "Criterio NIST (§4
       ["80 secuencias de 100.000 bits (1 MB)", "", "Proporción: ≥ 77 de 80 deben pasar", "(1−α) − 3·√(α(1−α)/m) = 0,9566",
        "", "Uniformidad: P-valores parejos en [0,1)", "(chi-cuadrado, P ≥ 0,0001)"], GREEN, 17)
 
-s = new_slide("Experimento: 5 generadores, las mismas pruebas", P3,
-              "LCG falla todo, el sesgado falla 8 de 10: las pruebas detectan generadores malos. Mersenne Twister y "
-              "SHA-256(contador) pasan todo y son 100% predecibles. os.urandom falló una por azar (falso positivo "
-              "del 1%; además la prueba DFT tiene un defecto conocido).")
+s = new_slide("Experimento: 6 generadores, las mismas pruebas", P3,
+              "Primera fila: nuestra ESP32, 1 MB capturado por USB, pasa las 10. LCG falla todo, el sesgado falla "
+              "8 de 10: las pruebas detectan generadores malos. Mersenne Twister y SHA-256(contador) pasan todo y "
+              "son 100% predecibles. Un fallo aislado puede pasar por azar (1% por prueba).")
 picture(s, "nist_tabla.png", Inches(0.4), Inches(1.5), w=Inches(12.5))
-text(s, "Mersenne Twister y SHA-256(contador) pasan TODO… y son 100% predecibles.", Inches(0.6), Inches(5.3),
+text(s, "Mersenne Twister y SHA-256(contador) pasan TODO… y son 100% predecibles.", Inches(0.6), Inches(5.6),
      Inches(12), Inches(0.6), 21, AMBER, bold=True)
-text(s, "os.urandom falló DFT por azar (76/80): con α = 1% es esperable de vez en cuando.", Inches(0.6), Inches(5.95),
-     Inches(12), Inches(0.5), 16, MUTED)
+text(s, "La ESP32 real pasa 10/10. Con α = 1%, un fallo aislado es esperable; preocupa si se repite.",
+     Inches(0.6), Inches(6.2), Inches(12), Inches(0.5), 16, MUTED)
 
 s = new_slide("Los bits como imagen", P3,
               "Cada pixel es un bit. El LCG muestra rayas: período corto en los bits bajos. Mersenne Twister se ve "
@@ -352,17 +352,22 @@ text(s, "El ruido crudo del ESP32 no es accesible: medir entropía sobre la sali
         "certificación.", Inches(0.6), Inches(5.9), Inches(12), Inches(0.8), 16, MUTED)
 
 s = new_slide("Con la placa real", P3,
-              "Mostrar la consola o el simulador conectado. Los comandos solo existen en el firmware DEMO y nunca "
-              "envían secretos. Si hay tiempo, correr la captura y la batería NIST en vivo.")
-table(s, [["Comando USB (firmware DEMO)", "Respuesta"],
-          ["ES:PING", "ES:PONG 0.1.0 DEMO ESP32-D0WD-V3"],
-          ["ES:RNG 64", "64 bytes distintos en cada pedido"]],
-      Inches(0.6), Inches(1.6), Inches(12.1), [0.4, 0.6], size=17)
+              "1 MB del RNG de nuestra ESP32-D0WD-V3, capturado por USB con el firmware DEMO (3 minutos). Pasa las "
+              "10 pruebas de SP 800-22, 7,88 bits por byte de MCV y cero fallas en los health tests. Recordar: "
+              "descarta fallas groseras, no certifica, porque la salida ya está procesada por el chip.")
+table(s, [["Prueba sobre 1.000.000 de bytes reales", "Resultado"],
+          ["NIST SP 800-22 (80 × 100.000 bits)", "10 / 10 pasan"],
+          ["SP 800-90B MCV / Lag Prediction", "7,88 / 7,97 bits por byte"],
+          ["SP 800-90B H_I (mínimo)", "7,54 bits por byte (94%, igual que el CSPRNG)"],
+          ["Chi-cuadrado (256 valores)", "p = 0,56: no rechaza uniformidad"],
+          ["Health tests (RCT y APT)", "ok, 0 fallas"]],
+      Inches(0.6), Inches(1.6), Inches(12.1), [0.45, 0.55], size=17,
+      highlight={(1, 1): RGBColor(0x0E, 0x3A, 0x2A), (5, 1): RGBColor(0x0E, 0x3A, 0x2A)})
 code = ["python tools/entropy_analysis/capture_esp32.py --port COM4 --rng 1000000 --out esp32_rng.bin",
         "python tools/entropy_analysis/nist_sp800_22.py --file esp32_rng.bin"]
-text(s, code, Inches(0.6), Inches(3.7), Inches(12.1), Inches(1.0), 14, GREEN, font="Consolas")
-text(s, "El simulador web arma la wallet con esos bytes y se niega a generar si la placa no está conectada.",
-     Inches(0.6), Inches(4.9), Inches(12), Inches(0.6), 18, FG)
+text(s, code, Inches(0.6), Inches(5.0), Inches(12.1), Inches(1.0), 14, GREEN, font="Consolas")
+text(s, "Con 94% de entropía, los 64 bytes que pide el firmware aportan ~482 bits para los 256 de la semilla.",
+     Inches(0.6), Inches(6.0), Inches(12), Inches(0.6), 18, FG)
 
 s = new_slide("BIP-39: de 256 bits a 24 palabras", P3,
               "256 + 8 de checksum = 264 = 24 × 11. Cada palabra son 11 bits (2048 palabras). La última lleva 3 bits "
