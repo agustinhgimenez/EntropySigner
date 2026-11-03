@@ -61,6 +61,7 @@
             publishToLab(data);
         }
         renderInspector();
+        renderDerived();
     }
 
     function labUrl(d) {
@@ -107,6 +108,86 @@
         link.textContent = "Ver el paso a paso de esta wallet en el laboratorio →";
         root.replaceChildren(dl, link);
     }
+
+    // ------------------------------------------------- derived keys ---
+
+    const DERIVED_PAGE = 10;
+    let derivedKey = null;
+    let derivedJob = 0;
+
+    function el(tag, text, cls) {
+        const node = document.createElement(tag);
+        if (text !== undefined) node.textContent = text;
+        if (cls) node.className = cls;
+        return node;
+    }
+
+    async function renderDerived() {
+        const root = $("derived");
+        const d = inspectorData;
+        if (!d) {
+            derivedKey = null;
+            derivedJob++;
+            root.innerHTML = '<p class="empty">Gener&aacute; una wallet para ver sus direcciones derivadas.</p>';
+            return;
+        }
+        const coin = $("d-coin").value;
+        const account = Math.min(99, Math.max(0, parseInt($("d-account").value, 10) || 0));
+        const change = parseInt($("d-change").value, 10);
+        const key = [d.seed, coin, account, change].join("|");
+        if (key === derivedKey) return;
+        derivedKey = key;
+        const job = ++derivedJob;
+        root.replaceChildren(el("p", "Derivando claves…", "empty"));
+
+        const ES = window.ESCrypto;
+        const acct = await ES.deriveAccount(ES.fromHex(d.seed), coin, account, change);
+        if (job !== derivedJob) return;
+
+        const dl = el("dl");
+        for (const [k, v, cls] of [
+            ["BIP-32 root key", acct.rootXprv, "secret"],
+            [`Cuenta ${acct.accountPath} xprv`, acct.accountXprv, "secret"],
+            [`Cuenta ${acct.accountPath} xpub`, acct.accountXpub, ""],
+            [`Cadena ${acct.chainPath} xprv`, acct.chainXprv, "secret"],
+            [`Cadena ${acct.chainPath} xpub`, acct.chainXpub, ""],
+        ]) {
+            dl.append(el("dt", k), el("dd", v, cls));
+        }
+
+        const table = el("table");
+        const head = el("tr");
+        for (const h of ["Ruta", "Dirección", "Clave pública", "Clave privada"]) head.append(el("th", h));
+        table.append(head);
+        const more = el("button", `Mostrar ${DERIVED_PAGE} más`, "action more");
+        let next = 0;
+
+        async function addRows() {
+            more.disabled = true;
+            const rows = await ES.deriveRows(coin, acct, next, DERIVED_PAGE);
+            if (job !== derivedJob) return;
+            for (const r of rows) {
+                const tr = el("tr");
+                const addr = el("td");
+                const link = el("a", r.address);
+                link.href = EXPLORERS[coin].url(r.address);
+                link.target = "_blank";
+                link.rel = "noopener";
+                link.title = `Ver en ${EXPLORERS[coin].name}`;
+                addr.append(link);
+                tr.append(el("td", r.path), addr, el("td", r.publicKey), el("td", r.privateKey, "secret"));
+                table.append(tr);
+            }
+            next += DERIVED_PAGE;
+            more.disabled = false;
+        }
+
+        more.addEventListener("click", addRows);
+        root.replaceChildren(dl, table, more);
+        await addRows();
+    }
+
+    for (const id of ["d-coin", "d-account", "d-change"]) $(id).addEventListener("change", renderDerived);
 
     // -------------------------------------------------------- firmware ---
 

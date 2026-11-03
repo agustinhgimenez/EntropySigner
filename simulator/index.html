@@ -139,6 +139,23 @@
         .inspector dd { font-family: var(--mono); word-break: break-all; color: var(--text); }
         .inspector dd.secret { color: var(--amber); }
         .inspector dd.wiped { color: var(--muted); font-style: italic; }
+        .derived-controls { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+        .derived-controls label { display: flex; gap: 6px; align-items: center; }
+        .derived-controls select, .derived-controls input {
+            background: #05080b; color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+            padding: 4px 6px; font-size: 12px;
+        }
+        .derived-controls input { width: 56px; }
+        .derived dl { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; font-size: 12px; margin-bottom: 12px; }
+        .derived dt { color: var(--muted); }
+        .derived dd { font-family: var(--mono); word-break: break-all; }
+        .derived .secret { color: var(--amber); }
+        .derived table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+        .derived th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px; border-bottom: 1px solid var(--border); }
+        .derived td { font-family: var(--mono); word-break: break-all; padding: 6px; border-bottom: 1px solid #16212c; vertical-align: top; }
+        .derived th:first-child { width: 120px; }
+        .derived td a { color: var(--cyan); }
+        .derived .more { margin-top: 10px; }
         .warn { font-size: 12px; color: var(--amber); margin-bottom: 10px; line-height: 1.4; }
         .empty { color: var(--muted); font-size: 13px; }
     </style>
@@ -192,6 +209,28 @@
                 <p class="warn">Solo existe en el simulador: el firmware real nunca muestra la entrop&iacute;a ni la seed,
                     y las borra de la RAM apenas las usa. Ac&aacute; se conservan para explicar cada paso.</p>
                 <div id="inspector"><p class="empty">Gener&aacute; una wallet para ver los valores intermedios.</p></div>
+            </div>
+
+            <div class="panel derived">
+                <h2>Claves derivadas (BIP-32 / BIP-44)</h2>
+                <p class="warn">Como iancoleman.io/bip39: todas las claves que salen de la misma frase. El firmware solo
+                    deriva el &iacute;ndice 0 y nunca muestra claves privadas; esto existe para estudiar la derivaci&oacute;n.</p>
+                <div class="derived-controls">
+                    <label>Moneda
+                        <select id="d-coin">
+                            <option value="btc">Bitcoin (coin 0')</option>
+                            <option value="eth">Ethereum (coin 60')</option>
+                        </select>
+                    </label>
+                    <label>Cuenta <input type="number" id="d-account" min="0" max="99" value="0"></label>
+                    <label>Cadena
+                        <select id="d-change">
+                            <option value="0">0 &middot; externa (recibir)</option>
+                            <option value="1">1 &middot; interna (cambio)</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="derived"><p class="empty">Gener&aacute; una wallet para ver sus direcciones derivadas.</p></div>
             </div>
         </section>
     </main>

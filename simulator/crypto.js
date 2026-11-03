@@ -374,6 +374,83 @@
         return { address: toChecksumAddress(hash.slice(12)), publicKey: toHex(compressPoint(pt)) };
     }
 
+    // ------------------------------------------- derivation explorer ---
+
+    // Simulator-only tooling in the spirit of iancoleman.io/bip39: the firmware
+    // derives index 0 only and never exports private or extended keys.
+    const COINS = {
+        btc: { name: "Bitcoin", coinType: 0 },
+        eth: { name: "Ethereum", coinType: 60 },
+    };
+
+    async function fingerprint(node) {
+        return ripemd160(await sha256(compressPoint(pointMul(node.k, G)))).slice(0, 4);
+    }
+
+    // ckdPriv plus the depth, parent fingerprint and child number needed for BIP-32 serialization.
+    async function childExtended(node, index) {
+        return { ...(await ckdPriv(node, index)), depth: node.depth + 1, parentFp: await fingerprint(node), index };
+    }
+
+    async function serializeExtended(node, isPrivate) {
+        const version = ser32(isPrivate ? 0x0488ade4 : 0x0488b21e);
+        const key = isPrivate
+            ? concat(new Uint8Array([0]), bigToBytes(node.k, 32))
+            : compressPoint(pointMul(node.k, G));
+        const data = concat(version, new Uint8Array([node.depth]), node.parentFp, ser32(node.index), node.chain, key);
+        const checksum = (await sha256(await sha256(data))).slice(0, 4);
+        return base58Encode(concat(data, checksum));
+    }
+
+    async function privateKeyToWif(k) {
+        return base58Check(0x80, concat(bigToBytes(k, 32), new Uint8Array([1])));
+    }
+
+    async function keyRow(coin, node) {
+        const pt = pointMul(node.k, G);
+        const pub = compressPoint(pt);
+        if (coin === "btc") {
+            return {
+                address: await base58Check(0x00, ripemd160(await sha256(pub))),
+                publicKey: toHex(pub),
+                privateKey: await privateKeyToWif(node.k),
+            };
+        }
+        const hash = keccak256(concat(bigToBytes(pt.x, 32), bigToBytes(pt.y, 32)));
+        return {
+            address: toChecksumAddress(hash.slice(12)),
+            publicKey: "0x" + toHex(pub),
+            privateKey: "0x" + toHex(bigToBytes(node.k, 32)),
+        };
+    }
+
+    // BIP-44: m / 44' / coin' / account' / change / index
+    async function deriveAccount(seed, coin, account, change) {
+        const master = { ...(await createMasterKey(seed)), depth: 0, parentFp: new Uint8Array(4), index: 0 };
+        const accountPath = `m/44'/${COINS[coin].coinType}'/${account}'`;
+        let accountNode = master;
+        for (const index of [44, COINS[coin].coinType, account]) accountNode = await childExtended(accountNode, index + HARDENED);
+        const chainNode = await childExtended(accountNode, change);
+        return {
+            rootXprv: await serializeExtended(master, true),
+            accountPath,
+            accountXprv: await serializeExtended(accountNode, true),
+            accountXpub: await serializeExtended(accountNode, false),
+            chainPath: `${accountPath}/${change}`,
+            chainXprv: await serializeExtended(chainNode, true),
+            chainXpub: await serializeExtended(chainNode, false),
+            chainNode,
+        };
+    }
+
+    async function deriveRows(coin, acct, start, count) {
+        const rows = [];
+        for (let i = start; i < start + count; i++) {
+            rows.push({ path: `${acct.chainPath}/${i}`, ...(await keyRow(coin, await ckdPriv(acct.chainNode, i))) });
+        }
+        return rows;
+    }
+
     // -------------------------------------------------------- self-test ---
 
     // Same vectors as tests/test_bip39, test_bitcoin and test_ethereum.
@@ -435,6 +512,9 @@
         createMasterKey,
         bitcoinAddress,
         ethereumAddress,
+        COINS,
+        deriveAccount,
+        deriveRows,
         selfTest,
     };
 })();
