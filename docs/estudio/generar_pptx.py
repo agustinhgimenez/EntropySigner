@@ -369,6 +369,26 @@ text(s, code, Inches(0.6), Inches(5.0), Inches(12.1), Inches(1.0), 14, GREEN, fo
 text(s, "Con 94% de entropía, los 64 bytes que pide el firmware aportan ~482 bits para los 256 de la semilla.",
      Inches(0.6), Inches(6.0), Inches(12), Inches(0.6), 18, FG)
 
+s = new_slide("¿La entropía de MI wallet es buena? Cómo verlo", P3,
+              "Pregunta típica. La calidad se juzga sobre la FUENTE, con muchos datos: 1 MB, 10/10 NIST. Los 64 bytes "
+              "de una wallet solo admiten un control de cordura: unos 256 ± 34 unos. Demostrarlo en vivo: generar en "
+              "el simulador, abrir el laboratorio, mirar la sección 1 y correr la sección 3 con la placa.")
+panel(s, Inches(0.6), Inches(1.6), Inches(5.9), Inches(3.9), "En la web, con la ESP32 conectada",
+      ["1. Simulador: GENERAR WALLET", "   el monitor serie dice «64 bytes del RNG recibidos»",
+       "2. Inspector: RNG (64 B) → SHA-256 → entropía (32 B)",
+       "3. Laboratorio, sección 1: los 512 bits como grilla",
+       "   y cuántos son unos (se esperan 256 ± 34)",
+       "4. Laboratorio: Conectar ESP32 → sección 3:",
+       "   Correr pruebas; la fila verde son 20.000",
+       "   bytes nuevos de la placa"], CYAN, 15)
+panel(s, Inches(6.8), Inches(1.6), Inches(5.9), Inches(3.9), "Cómo interpretarlo",
+      ["La calidad es de la FUENTE, no de una wallet:", "1 MB de la placa → 10/10 NIST, 94% de min-entropía", "",
+       "64 bytes = 512 bits: muy pocos para NIST,", "solo sirven como control de cordura", "",
+       "Veredicto esperado en la fila verde:", "«entropía completa» y ningún p < 0,01"], GREEN, 15)
+text(s, "Unos fuera de 222–290 o un «FALLA» repetido en la sección 3 indicarían una fuente rota. Que todo pase no "
+        "prueba que sea impredecible: por eso importan la física y el diseño (512 bits para 256).",
+     Inches(0.6), Inches(5.75), Inches(12.1), Inches(0.9), 16, AMBER)
+
 s = new_slide("BIP-39: de 256 bits a 24 palabras", P3,
               "256 + 8 de checksum = 264 = 24 × 11. Cada palabra son 11 bits (2048 palabras). La última lleva 3 bits "
               "de entropía y 8 de checksum: solo 8 últimas palabras válidas. Mostrarlo en el laboratorio.")

@@ -350,6 +350,17 @@ ESP32-D0WD-V3 (DevKit V1), firmware DEMO con `bootloader_random_enable()` y 2 µ
 
 **Cómo leerlo:** la salida del RNG es indistinguible de un CSPRNG con estas pruebas, y no aparece ninguna de las fallas que buscábamos (sesgo, rachas, periodicidad, fuente trabada). Con el 94% medido, los 64 bytes que pide el firmware aportan unos 482 bits, muy por encima de los 256 + 64 que exige SP 800-90C para la salida de SHA-256. Como se explicó en 5.7, esto descarta fallas groseras pero **no certifica** la entropía: la salida de `RNG_DATA_REG` ya está procesada por el chip.
 
+### 6.4 ¿La entropía de *mi* wallet es buena? Cómo verlo en la web
+
+La calidad se juzga sobre la **fuente**, con muchos datos (el millón de bytes de 6.3). Una wallet usa solo 64 bytes = 512 bits: son muy pocos para las pruebas de NIST y solo admiten un control de cordura.
+
+1. En el simulador ([cripto.agustingimenez.ar](https://cripto.agustingimenez.ar)), conectar la ESP32 y tocar **GENERAR WALLET**. El monitor serie confirma `[USB] 64 bytes del RNG de hardware recibidos de la ESP32`.
+2. El **inspector** muestra los 64 bytes del RNG, la entropía de 32 bytes que sale de SHA-256 y el resto de la cadena.
+3. **Ver el paso a paso de esta wallet en el laboratorio** → sección 1: los 512 bits como grilla y cuántos son unos. Se esperan 256, con un desvío de √(512·¼) ≈ 11,3; cualquier valor entre **222 y 290** (±3 desvíos) es normal.
+4. En el laboratorio, **Conectar ESP32** (arriba, junto al selector de fuente) y después, en la sección 3, **Correr pruebas**: la fila verde analiza 20.000 bytes nuevos de la placa. Lo esperado es «entropía completa» y ningún p-valor en rojo. El navegador deja usar el puerto a una sola pestaña: si el simulador está conectado, hay que desconectarlo o cerrarlo primero.
+
+Un conteo de unos fuera de 222–290 o un «FALLA» que se repite en la sección 3 indicarían una fuente rota. Que todo pase no prueba que la wallet sea impredecible (5.5): esa garantía viene de la física del RNG y del diseño de 512 bits para 256.
+
 ---
 
 ## 7. La criptografía que viene después (resumen)
