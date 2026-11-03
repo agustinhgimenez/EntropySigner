@@ -432,6 +432,7 @@
         for (const index of [44, COINS[coin].coinType, account]) accountNode = await childExtended(accountNode, index + HARDENED);
         const chainNode = await childExtended(accountNode, change);
         return {
+            masterFingerprint: toHex(await fingerprint(master)),
             rootXprv: await serializeExtended(master, true),
             accountPath,
             accountXprv: await serializeExtended(accountNode, true),

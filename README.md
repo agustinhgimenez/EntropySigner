@@ -179,6 +179,8 @@ EntropySigner/
 ├── tools/
 │   ├── entropy_analysis/       analyze_entropy.py (NIST SP 800-90B)
 │   └── verification/           verify_cross.py (implementación Python independiente)
+├── simulator/                  simulador web de la pantalla + laboratorio criptográfico
+├── extension/                  extensión de navegador watch-only (direcciones ETH, saldos)
 ├── docs/                       HARDWARE.md · ARCHITECTURE.md · SECURITY.md
 ├── hardware/                   schematic/ · pcb/ · enclosure/ (a completar con el hardware real)
 ├── presentation/               slides.md · guion.md · defensa.md · assets/
@@ -227,6 +229,22 @@ python tools/entropy_analysis/capture_esp32.py --port COM4 --rng 1000000 --out r
 python tools/entropy_analysis/analyze_entropy.py --file rng.bin --format u8
 python tools/entropy_analysis/nist_sp800_22.py --file rng.bin   # 9 tests NIST SP 800-22
 ```
+
+### Extensión de navegador (solo lectura)
+
+`extension/` es una extensión Manifest V3 para Chrome/Edge, tipo MetaMask pero
+**watch-only**: guarda direcciones de Ethereum y muestra su saldo (Mainnet o
+Sepolia) con link a Etherscan. Nunca recibe claves privadas ni puede firmar.
+
+1. Abrir `chrome://extensions` (o `edge://extensions`), activar **Modo de
+   desarrollador** y **Cargar descomprimida** → carpeta `extension/`.
+2. Abrir el simulador ([cripto.agustingimenez.ar](https://cripto.agustingimenez.ar)
+   o `simulator/index.html`; para `file://` hay que habilitar «Permitir acceso a
+   URLs de archivo» en la extensión).
+3. Generar una wallet, elegir **Ethereum** en «Claves derivadas» y tocar
+   **Conectar a la extensión** en cada dirección. Cada cuenta queda etiquetada
+   con la huella BIP-32 de su wallet (`ES 1a2b3c4d · 0/0`), así se pueden
+   conectar varias wallets a la vez.
 
 ---
 

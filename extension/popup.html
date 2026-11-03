@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>EntropySigner Watch</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <header>
+        <h1>ENTROPYSIGNER</h1>
+        <select id="network" title="Red para consultar saldos">
+            <option value="mainnet">Ethereum Mainnet</option>
+            <option value="sepolia">Sepolia (testnet)</option>
+        </select>
+    </header>
+
+    <section class="hero" id="hero" hidden>
+        <div class="label" id="hero-label"></div>
+        <div class="balance" id="hero-balance">&hellip;</div>
+        <div class="address" id="hero-address" title="Copiar direcci&oacute;n"></div>
+        <div class="path" id="hero-path"></div>
+        <div class="actions">
+            <button id="copy">Copiar</button>
+            <a id="explorer" target="_blank" rel="noopener">Ver en Etherscan &#8599;</a>
+            <button id="rename">Renombrar</button>
+            <button id="remove" class="danger">Quitar</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Cuentas conectadas</h2>
+        <ul id="accounts"></ul>
+        <p class="empty" id="empty">Todav&iacute;a no hay cuentas. Gener&aacute; una wallet en el simulador y toc&aacute;
+            &laquo;Conectar a la extensi&oacute;n&raquo;, o agreg&aacute; una direcci&oacute;n abajo.</p>
+    </section>
+
+    <form id="add">
+        <input id="add-address" placeholder="0x... (direcci&oacute;n Ethereum)" spellcheck="false" autocomplete="off">
+        <button type="submit">Agregar</button>
+    </form>
+    <p class="note">Solo lectura: la extensi&oacute;n nunca recibe claves privadas y no puede firmar.
+        Las claves quedan en el dispositivo.</p>
+
+    <script src="popup.js"></script>
+</body>
+</html>

@@ -156,6 +156,10 @@
         .derived th:first-child { width: 120px; }
         .derived td a { color: var(--cyan); }
         .derived .more { margin-top: 10px; }
+        .derived .connect { display: block; margin-top: 4px; padding: 2px 6px; font-size: 10px; }
+        .derived:not(.ext) .connect { display: none; }
+        .ext-status { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+        .derived.ext .ext-status { color: var(--green); }
         .warn { font-size: 12px; color: var(--amber); margin-bottom: 10px; line-height: 1.4; }
         .empty { color: var(--muted); font-size: 13px; }
     </style>
@@ -230,6 +234,8 @@
                         </select>
                     </label>
                 </div>
+                <p class="ext-status" id="ext-status">Instal&aacute; la extensi&oacute;n EntropySigner Watch (carpeta
+                    <code>extension/</code> del repo) para conectar direcciones de Ethereum en modo solo lectura.</p>
                 <div id="derived"><p class="empty">Gener&aacute; una wallet para ver sus direcciones derivadas.</p></div>
             </div>
         </section>

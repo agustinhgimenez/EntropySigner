@@ -175,6 +175,16 @@
                 link.rel = "noopener";
                 link.title = `Ver en ${EXPLORERS[coin].name}`;
                 addr.append(link);
+                if (coin === "eth") {
+                    const connect = el("button", "Conectar a la extensión", "action connect");
+                    connect.addEventListener("click", () =>
+                        connectToExtension({
+                            address: r.address,
+                            path: r.path,
+                            label: `ES ${acct.masterFingerprint} · ${r.path.split("/").slice(-2).join("/")}`,
+                        }, connect));
+                    addr.append(connect);
+                }
                 tr.append(el("td", r.path), addr, el("td", r.publicKey), el("td", r.privateKey, "secret"));
                 table.append(tr);
             }
@@ -188,6 +198,37 @@
     }
 
     for (const id of ["d-coin", "d-account", "d-change"]) $(id).addEventListener("change", renderDerived);
+
+    // ------------------------------------------- watch-only extension ---
+
+    // extension/content.js answers on window.postMessage; only addresses and paths are sent.
+    const EXT_PAGE = "entropysigner-page";
+    const EXT_SOURCE = "entropysigner-ext";
+    const pendingConnects = new Map();
+
+    function connectToExtension(account, button) {
+        pendingConnects.set(account.address.toLowerCase(), button);
+        button.disabled = true;
+        window.postMessage({ source: EXT_PAGE, type: "connect", account }, "*");
+    }
+
+    window.addEventListener("message", (e) => {
+        if (e.source !== window || !e.data || e.data.source !== EXT_SOURCE) return;
+        const msg = e.data;
+        if (msg.type === "ready") {
+            document.querySelector(".derived").classList.add("ext");
+            $("ext-status").textContent = `Extensión EntropySigner Watch ${msg.version} detectada: ` +
+                "elegí Ethereum y tocá «Conectar a la extensión» en las direcciones que quieras ver.";
+        } else if (msg.type === "connected") {
+            const button = pendingConnects.get(msg.address.toLowerCase());
+            pendingConnects.delete(msg.address.toLowerCase());
+            if (button) button.textContent = msg.already ? "Ya estaba conectada" : "Conectada ✓";
+            log(`[EXT] ${msg.address} ${msg.already ? "ya estaba en" : "conectada a"} la extensión (solo lectura)`, "dev");
+        } else if (msg.type === "error") {
+            log(`[EXT] ${msg.message}`, "fail");
+        }
+    });
+    window.postMessage({ source: EXT_PAGE, type: "ping" }, "*");
 
     // -------------------------------------------------------- firmware ---
 

@@ -1,0 +1,22 @@
+{
+    "manifest_version": 3,
+    "name": "EntropySigner Watch",
+    "version": "0.1.0",
+    "description": "Watch-only Ethereum wallet for EntropySigner: balances and Etherscan links, no private keys.",
+    "permissions": ["storage"],
+    "host_permissions": [
+        "https://ethereum-rpc.publicnode.com/*",
+        "https://ethereum-sepolia-rpc.publicnode.com/*"
+    ],
+    "action": {
+        "default_title": "EntropySigner Watch",
+        "default_popup": "popup.html"
+    },
+    "content_scripts": [
+        {
+            "matches": ["https://cripto.agustingimenez.ar/*", "file:///*/simulator/index.html"],
+            "js": ["content.js"],
+            "run_at": "document_idle"
+        }
+    ]
+}
