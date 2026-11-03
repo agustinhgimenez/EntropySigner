@@ -9,7 +9,6 @@
 #include <string.h>
 
 #include "entropy/hw_rng.h"
-#include "entropy/ldr_entropy.h"
 #include "security/secure_mem.h"
 
 namespace es {
@@ -19,9 +18,6 @@ namespace {
 
 constexpr size_t kMaxLine = 48;
 constexpr long kMaxRngBytes = 1024;
-constexpr long kMaxLdrSamples = 512;
-constexpr long kMaxLdrDelayUs = 10000;
-constexpr uint32_t kDefaultLdrDelayUs = 200;
 constexpr size_t kRngChunk = 64;
 
 char g_line[kMaxLine];
@@ -56,22 +52,6 @@ void sendRng(long count) {
     Serial.print("\r\n");
 }
 
-void sendLdr(long count, long delay_us) {
-    // Sampled one by one so the buffer stays small; the delay matches collectLdrSamples().
-    entropy::initLdr();
-    Serial.print("ES:LDR ");
-    for (long i = 0; i < count; ++i) {
-        Serial.print(entropy::readLdrRaw());
-        if (i + 1 < count) {
-            Serial.write(',');
-        }
-        if (delay_us > 0) {
-            delayMicroseconds(static_cast<uint32_t>(delay_us));
-        }
-    }
-    Serial.print("\r\n");
-}
-
 void handleLine(char* line) {
     if (strcmp(line, "ES:PING") == 0) {
         Serial.printf("ES:PONG %s %s %s\r\n", kFirmwareVersion, kModeName, ESP.getChipModel());
@@ -84,25 +64,6 @@ void handleLine(char* line) {
             return;
         }
         sendRng(n);
-        return;
-    }
-    if (strncmp(line, "ES:LDR ", 7) == 0) {
-        char* args = line + 7;
-        char* space = strchr(args, ' ');
-        long n = 0;
-        long delay_us = kDefaultLdrDelayUs;
-        if (space != nullptr) {
-            *space = '\0';
-            if (!parseArg(space + 1, 0, kMaxLdrDelayUs, &delay_us)) {
-                Serial.print("ES:ERR LDR delay expects 0..10000 us\r\n");
-                return;
-            }
-        }
-        if (!parseArg(args, 1, kMaxLdrSamples, &n)) {
-            Serial.print("ES:ERR LDR expects 1..512\r\n");
-            return;
-        }
-        sendLdr(n, delay_us);
         return;
     }
     Serial.print("ES:ERR unknown command\r\n");

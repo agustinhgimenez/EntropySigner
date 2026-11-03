@@ -278,22 +278,16 @@
     // ---------------------------------------------------------- entropy ---
 
     // Same construction as src/entropy/entropy_pool.cpp:
-    // SHA-256(tag || 64 B TRNG || ldr_flag || LDR samples as uint16 LE).
-    const ENTROPY_TAG = enc.encode("EntropySigner/entropy-pool/v1");
+    // SHA-256(tag || 64 B TRNG).
+    const ENTROPY_TAG = enc.encode("EntropySigner/entropy-pool/v2");
     const HW_RNG_BYTES = 64;
 
-    function conditioningInput(rng, ldrSamples) {
-        const flag = new Uint8Array([ldrSamples ? 1 : 0]);
-        const ldrBytes = new Uint8Array(ldrSamples ? ldrSamples.length * 2 : 0);
-        if (ldrSamples) {
-            const dv = new DataView(ldrBytes.buffer);
-            ldrSamples.forEach((s, i) => dv.setUint16(2 * i, s, true));
-        }
-        return { tag: ENTROPY_TAG, rng, flag, ldrBytes, all: concat(ENTROPY_TAG, rng, flag, ldrBytes) };
+    function conditioningInput(rng) {
+        return { tag: ENTROPY_TAG, rng, all: concat(ENTROPY_TAG, rng) };
     }
 
-    async function conditionEntropy(rng, ldrSamples) {
-        return sha256(conditioningInput(rng, ldrSamples).all);
+    async function conditionEntropy(rng) {
+        return sha256(conditioningInput(rng).all);
     }
 
     // ----------------------------------------------------------- BIP-39 ---

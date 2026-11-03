@@ -42,10 +42,6 @@ void test_board_pins_are_safe_and_unique() {
     }
 }
 
-void test_ldr_is_on_adc1() {
-    TEST_ASSERT_TRUE(es::pins::isAdc1(es::board::kLdrPin));
-}
-
 void test_build_identity() {
     TEST_ASSERT_EQUAL_STRING("EntropySigner", es::kProductName);
 #if defined(ES_MODE_DEMO)
@@ -70,7 +66,6 @@ void setup() {
     UNITY_BEGIN();
     RUN_TEST(test_pin_rules_reject_reserved_pins);
     RUN_TEST(test_board_pins_are_safe_and_unique);
-    RUN_TEST(test_ldr_is_on_adc1);
     RUN_TEST(test_build_identity);
     RUN_TEST(test_chip_model);
     UNITY_END();

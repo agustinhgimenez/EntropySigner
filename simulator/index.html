@@ -97,30 +97,7 @@
         .state { font-family: var(--mono); font-size: 18px; color: var(--cyan); }
         .timeout { font-family: var(--mono); font-size: 12px; color: var(--amber); }
 
-        .ldr-box { display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center; }
-        .sensor {
-            width: 120px; height: 120px; border-radius: 12px; position: relative;
-            background: radial-gradient(circle, #2b3a48 0%, #121a22 70%);
-            border: 1px dashed #3a4b5c; cursor: grab; overflow: hidden;
-        }
-        .sensor .ldr {
-            position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; transform: translate(-50%, -50%);
-            border-radius: 50%; background: radial-gradient(circle, #f5d77a 0%, #c9893a 60%, #6b4a1f 100%);
-            box-shadow: 0 0 calc(var(--glow, .6) * 30px) rgba(255, 220, 120, calc(var(--glow, .6)));
-        }
-        .sensor .ldr::after {
-            content: ""; position: absolute; inset: 6px; border-radius: 50%;
-            background: repeating-linear-gradient(90deg, transparent 0 3px, rgba(120, 40, 20, .7) 3px 5px);
-        }
-        .sensor .shade {
-            position: absolute; inset: 0; background: rgba(0, 0, 0, var(--shade, 0)); pointer-events: none;
-            transition: background .08s;
-        }
-        .sensor small { position: absolute; bottom: 6px; width: 100%; text-align: center; font-size: 10px; color: var(--muted); }
         label { font-size: 13px; color: var(--muted); }
-        input[type=range] { width: 100%; accent-color: var(--cyan); }
-        .readout { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
-        .readout b { color: var(--cyan); }
 
         .toggles { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 4px; }
         .toggles label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
@@ -191,25 +168,6 @@
                 <div class="device-row">
                     <button class="action" id="connect">Conectar ESP32 real (USB)</button>
                     <span id="dev-status" class="dev-status sim"><b>ESP32 no conectada</b></span>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h2>Sensor de luz (LDR en GPIO34) <span id="ldr-mode" class="muted"></span></h2>
-                <div class="ldr-box">
-                    <div class="sensor" id="sensor" title="Pas&aacute; el mouse por encima: es tu mano tapando el sensor">
-                        <div class="ldr"></div>
-                        <div class="shade"></div>
-                        <small>pas&aacute; la mano</small>
-                    </div>
-                    <div>
-                        <label for="light">Luz ambiente</label>
-                        <input type="range" id="light" min="0" max="100" value="60">
-                        <div class="readout">
-                            <span id="lux">-</span> lux &middot; R<sub>LDR</sub> <span id="rldr">-</span> &middot;
-                            ADC <b id="adc">-</b> / 4095
-                        </div>
-                    </div>
                 </div>
             </div>
 

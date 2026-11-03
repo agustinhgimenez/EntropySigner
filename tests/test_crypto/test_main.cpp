@@ -173,11 +173,9 @@ void test_entropy_pool_generation() {
     uint8_t entropy1[32] = {0};
     uint8_t entropy2[32] = {0};
 
-    // Generate without LDR (pure HW RNG conditioning)
-    TEST_ASSERT_TRUE(es::entropy::generateEntropy256(entropy1, false));
-
-    // Generate with LDR
-    TEST_ASSERT_TRUE(es::entropy::generateEntropy256(entropy2, true));
+    TEST_ASSERT_TRUE(es::entropy::generateEntropy256(entropy1));
+    TEST_ASSERT_TRUE(es::entropy::generateEntropy256(entropy2));
+    TEST_ASSERT_FALSE(es::entropy::generateEntropy256(nullptr));
 
     // Both outputs must be non-zero and non-identical
     uint8_t zeroes[32] = {0};

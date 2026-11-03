@@ -12,7 +12,7 @@ namespace entropy {
 // radio, or the SAR ADC when enabled through bootloader_random_enable(). With
 // the radio off (offline device), these functions enable the SAR ADC source for
 // the duration of the call. While enabled the ADC cannot be used, so do not
-// call them concurrently with LDR sampling (entropy/ldr_entropy.h).
+// call them concurrently with any analogRead().
 
 // Returns 32 random bits.
 uint32_t getRandom32();

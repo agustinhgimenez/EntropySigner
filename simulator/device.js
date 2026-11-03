@@ -1,12 +1,11 @@
 // EntropySigner - connection to the real ESP32 over USB (Web Serial API, Chrome/Edge/Brave).
 // Speaks the DEMO-only protocol of src/system/demo_console.cpp to pull raw HW RNG
-// bytes and LDR readings. Wallets are still assembled in the browser.
+// bytes. Wallets are still assembled in the browser.
 (function () {
     "use strict";
 
     const BAUD = 115200;
     const MAX_RNG_PER_REQUEST = 1024;
-    const MAX_LDR_PER_REQUEST = 512;
     const PING_ATTEMPTS = 12;
     const PING_INTERVAL_MS = 400;
 
@@ -145,20 +144,6 @@
         return out;
     }
 
-    async function getLdr(samples, delayUs = 200, onProgress) {
-        const out = new Uint16Array(samples);
-        for (let off = 0; off < samples; off += MAX_LDR_PER_REQUEST) {
-            const n = Math.min(MAX_LDR_PER_REQUEST, samples - off);
-            const values = (await request(`ES:LDR ${n} ${delayUs}`, "ES:LDR", 8000)).split(",").map(Number);
-            if (values.length !== n || values.some((v) => !Number.isInteger(v) || v < 0 || v > 4095)) {
-                throw new Error("Respuesta LDR inválida de la ESP32.");
-            }
-            out.set(values, off);
-            onProgress && onProgress(off + n, samples);
-        }
-        return out;
-    }
-
     // Ports authorized once are remembered by the browser: reconnect on page load and on plug-in.
     async function autoConnect() {
         if (!supported() || connected() || port) return null;
@@ -187,7 +172,6 @@
         autoConnect,
         disconnect,
         getRng,
-        getLdr,
         onLine: (fn) => lineListeners.push(fn),
         onStatus: (fn) => statusListeners.push(fn),
     };

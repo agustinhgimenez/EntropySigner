@@ -4,8 +4,8 @@
 
 #include "config/pin_rules.h"
 
-// Hardware description for ESP32-S3-DevKitC-1 + ST7796S (SPI) + FT6336U (I2C)
-// + LDR divider. See docs/HARDWARE.md and assets/circuit.svg.
+// Hardware description for ESP32-S3-DevKitC-1 + ST7796S (SPI) + FT6336U (I2C).
+// See docs/HARDWARE.md and assets/circuit.svg.
 // ES_BOARD_ESP32_DEVKIT selects an alternate map for the ESP32 DOIT DevKit V1.
 
 // A write-only SPI panel cannot be detected at runtime, so its presence is a
@@ -39,9 +39,6 @@ constexpr int kTouchScl = 22;
 constexpr int kTouchInt = 27;
 constexpr int kTouchRst = 26;
 
-// LDR voltage divider on ADC1 (GPIO34 is input-only, fine for analog)
-constexpr int kLdrPin = 34;
-
 #else
 
 // Display ST7796S on SPI2 (FSPI)
@@ -59,9 +56,6 @@ constexpr int kTouchScl = 16;
 constexpr int kTouchInt = 17;
 constexpr int kTouchRst = 18;
 
-// LDR voltage divider on ADC1 (ADC2 conflicts with the radio)
-constexpr int kLdrPin = 1;
-
 #endif
 
 constexpr int kDisplayWidth = 320;
@@ -73,7 +67,7 @@ constexpr uint32_t kTouchI2cHz = 400000;
 
 constexpr int kUsedPins[] = {
     kDisplaySclk, kDisplayMosi, kDisplayMiso, kDisplayCs, kDisplayDc, kDisplayRst,
-    kDisplayBacklight, kTouchSda, kTouchScl, kTouchInt, kTouchRst, kLdrPin,
+    kDisplayBacklight, kTouchSda, kTouchScl, kTouchInt, kTouchRst,
 };
 constexpr int kUsedPinCount = sizeof(kUsedPins) / sizeof(kUsedPins[0]);
 
@@ -88,8 +82,6 @@ static_assert(pins::isSafeOutput(kTouchSda), "kTouchSda is not a safe output GPI
 static_assert(pins::isSafeOutput(kTouchScl), "kTouchScl is not a safe output GPIO");
 static_assert(pins::isSafeGpio(kTouchInt), "kTouchInt is not a safe GPIO");
 static_assert(pins::isSafeOutput(kTouchRst), "kTouchRst is not a safe output GPIO");
-static_assert(pins::isSafeGpio(kLdrPin), "kLdrPin is not a safe GPIO");
-static_assert(pins::isAdc1(kLdrPin), "kLdrPin must be an ADC1 channel");
 
 }  // namespace board
 }  // namespace es

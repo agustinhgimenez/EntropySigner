@@ -12,9 +12,6 @@
     const BOOT_TIMEOUT_MS = 2500;
     const TAP_GUARD_MS = 250;
     const MNEMONIC_TIMEOUT_MS = 120000;
-    const LDR_SAMPLE_PERIOD_MS = 40;
-    const LDR_REDRAW_PERIOD_MS = 120;
-    const LDR_GENERATION_SAMPLES = 128;
 
     // Approximate per-step time on an ESP32 @ 240 MHz (PBKDF2 dominates).
     const STEP_DELAY_MS = [80, 40, 1600, 60, 300, 300];
@@ -29,16 +26,7 @@
 
     const CARD_TOP = 108;
     const CARD_HEIGHT = 214;
-    const BAR_X = 32;
-    const BAR_WIDTH = 256;
-    const BAR_HEIGHT = 14;
-    const VALUE_Y = 162;
-    const LEVEL_BAR_Y = 192;
-    const VARIATION_LABEL_Y = 234;
-    const VARIATION_BAR_Y = 252;
-    const ADC_MAX = 4095;
-    const VARIATION_FULL_SCALE = 512;
-    const LDR_WINDOW = 32;
+    const CARD_TEXT_X = 32;
 
     const QR_CENTER_Y = 215;
     const QR_BOX = 250;
@@ -63,7 +51,7 @@
     };
 
     const STEPS = [
-        "Entropia 256 bits (RNG+LDR)",
+        "Entropia 256 bits (RNG HW)",
         "BIP-39: 24 palabras",
         "PBKDF2-HMAC-SHA512 seed",
         "BIP-32 master key",
@@ -88,7 +76,6 @@
         let busy = false;
         let session = { mnemonic: "", btc: "", eth: "" };
         let error = "";
-        let ldr = { window: new Array(LDR_WINDOW).fill(0), count: 0, next: 0, lastSample: 0, lastRedraw: 0 };
 
         // ----------------------------------------------------- primitives ---
 
@@ -143,16 +130,6 @@
             drawString(label, b.x + b.w / 2, b.y + b.h / 2, FONT.sansBold9, accent);
         }
 
-        function drawBar(y, value, fullScale, color) {
-            value = Math.min(value, fullScale);
-            const filled = Math.floor((value * BAR_WIDTH) / fullScale);
-            fillRect(BAR_X, y, filled, BAR_HEIGHT, color);
-            fillRect(BAR_X + filled, y, BAR_WIDTH - filled, BAR_HEIGHT, PAL.background);
-            lcd.strokeStyle = PAL.grey;
-            lcd.lineWidth = 1;
-            lcd.strokeRect(BAR_X - 1 + 0.5, y - 1 + 0.5, BAR_WIDTH + 1, BAR_HEIGHT + 1);
-        }
-
         function pollTap(now) {
             const tap = pendingTap;
             pendingTap = null;
@@ -182,37 +159,15 @@
             drawFrame();
             drawTitle("ENTROPYSIGNER", "Wallet offline BIP-39 / BIP-44", PAL.cyan);
             fillRoundRect(MARGIN, CARD_TOP, WIDTH - 2 * MARGIN, CARD_HEIGHT, 12, PAL.surface);
-            drawString("SENSOR LDR  -  ADC1_CH0", BAR_X, CARD_TOP + 22, FONT.sans9, PAL.grey, "left");
-            drawString("VARIACION AMBIENTAL", BAR_X, VARIATION_LABEL_Y, FONT.sans9, PAL.grey, "left");
-            drawString("Pasa la mano sobre el sensor", BAR_X, CARD_TOP + CARD_HEIGHT - 22, FONT.sans9, PAL.grey, "left");
-            drawString("Fuente principal: RNG de hardware", WIDTH / 2, 348, FONT.sans9, PAL.grey);
-            drawString("LDR: fuente adicional + SHA-256", WIDTH / 2, 372, FONT.sans9, PAL.grey);
+            drawString("FUENTE DE ENTROPIA", CARD_TEXT_X, CARD_TOP + 24, FONT.sans9, PAL.grey, "left");
+            drawString("RNG de hardware", CARD_TEXT_X, CARD_TOP + 62, FONT.sansBold12, PAL.cyan, "left");
+            drawString("Ruido termico del SAR ADC", CARD_TEXT_X, CARD_TOP + 102, FONT.sans9, PAL.grey, "left");
+            drawString("64 bytes -> SHA-256", CARD_TEXT_X, CARD_TOP + 132, FONT.sans9, PAL.grey, "left");
+            drawString("= 256 bits de entropia", CARD_TEXT_X, CARD_TOP + 162, FONT.sans9, PAL.green, "left");
+            drawString("Sin WiFi ni Bluetooth", CARD_TEXT_X, CARD_TOP + CARD_HEIGHT - 24, FONT.sans9, PAL.grey, "left");
+            drawString("Frase BIP-39 de 24 palabras", WIDTH / 2, 348, FONT.sans9, PAL.grey);
+            drawString("Direcciones BTC y ETH", WIDTH / 2, 372, FONT.sans9, PAL.grey);
             drawButton(WIDE_BUTTON, "GENERAR WALLET", PAL.green);
-            ldr = { window: new Array(LDR_WINDOW).fill(0), count: 0, next: 0, lastSample: 0, lastRedraw: 0 };
-        }
-
-        function refreshIdleSensor(now) {
-            if (now - ldr.lastSample >= LDR_SAMPLE_PERIOD_MS) {
-                ldr.lastSample = now;
-                ldr.window[ldr.next] = hw.readLdrRaw();
-                ldr.next = (ldr.next + 1) % LDR_WINDOW;
-                if (ldr.count < LDR_WINDOW) ldr.count++;
-            }
-            if (ldr.count === 0 || now - ldr.lastRedraw < LDR_REDRAW_PERIOD_MS) return;
-            ldr.lastRedraw = now;
-
-            const latest = ldr.window[(ldr.next + LDR_WINDOW - 1) % LDR_WINDOW];
-            const samples = ldr.window.slice(0, ldr.count);
-            const variation = Math.max(...samples) - Math.min(...samples);
-
-            fillRect(BAR_X, VALUE_Y - 16, BAR_WIDTH, 32, PAL.surface);
-            drawString(String(latest), BAR_X, VALUE_Y, FONT.sansBold12, PAL.cyan, "left");
-            drawString("/ 4095", BAR_X + 70, VALUE_Y, FONT.sans9, PAL.grey, "left");
-            drawBar(LEVEL_BAR_Y, latest, ADC_MAX, PAL.cyan);
-
-            fillRect(BAR_X + 190, VARIATION_LABEL_Y - 10, BAR_WIDTH - 190, 20, PAL.surface);
-            drawString(String(variation), BAR_X + BAR_WIDTH, VARIATION_LABEL_Y, FONT.sans9, PAL.green, "right");
-            drawBar(VARIATION_BAR_Y, variation, VARIATION_FULL_SCALE, PAL.green);
         }
 
         function drawGeneratingStep(index, label, status, color) {
@@ -236,9 +191,8 @@
                 step++;
             };
             try {
-                // LDR first, then RNG, as in entropy_pool.cpp.
-                const { ldr: samples, rng, origin } = await hw.getEntropySources(LDR_GENERATION_SAMPLES);
-                const entropy = await ES.conditionEntropy(rng, samples);
+                const rng = await hw.getRngBytes();
+                const entropy = await ES.conditionEntropy(rng);
                 await ok();
                 session.mnemonic = await ES.entropyToMnemonic(entropy);
                 await ok();
@@ -253,8 +207,6 @@
                 session.eth = eth.address;
                 await ok();
                 hw.inspect({
-                    origin,
-                    ldrSamples: samples,
                     rng: ES.toHex(rng),
                     entropy: ES.toHex(entropy),
                     mnemonic: session.mnemonic,
@@ -439,7 +391,6 @@
                     if (t || now - stateEnteredMs >= BOOT_TIMEOUT_MS) enterState("IDLE");
                     break;
                 case "IDLE":
-                    refreshIdleSensor(now);
                     if (t && contains(WIDE_BUTTON, t.x, t.y)) enterState("GENERATING");
                     break;
                 case "GENERATING":

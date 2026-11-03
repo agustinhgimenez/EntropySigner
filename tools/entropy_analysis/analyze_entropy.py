@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """EntropySigner - statistical entropy analysis of the physical sources (Paso 17).
 
-Analyzes raw samples of the LDR (12-bit ADC readings) or of the hardware RNG
-and estimates how much min-entropy they carry, following NIST SP 800-90B
+Analyzes raw samples of the ESP32 hardware RNG and estimates how much min-entropy they carry, following NIST SP 800-90B
 ("Recommendation for the Entropy Sources Used for Random Bit Generation",
 January 2018).
 
@@ -10,7 +9,7 @@ Input modes
 -----------
   --file PATH        samples captured earlier (raw bytes, 16-bit words or text)
   --synthetic KIND   reproducible simulated sources for demos / testing when no
-                     hardware is connected (trng, ldr, ldr-attack,
+                     hardware is connected (trng, biased, stuck,
                      sha256-counter, or all)
   --serial PORT      live capture over USB-UART (needs the optional pyserial)
 
@@ -22,7 +21,7 @@ Metrics
     3.1.3:  H_I = min(H_original, n * H_bitstring)
   * Shannon entropy H = -sum p_i log2 p_i (plug-in and Miller-Madow).
   * Chi-square goodness-of-fit test for uniformity.
-  * Autocorrelation at lags 1..10 (periodicity of ambient light, mains flicker).
+  * Autocorrelation at lags 1..10 (dependence between consecutive samples).
   * SP 800-90B 4.4 continuous health tests (Repetition Count, Adaptive
     Proportion) against a claimed entropy.
   * Entropy at the output of the firmware's SHA-256 conditioner, using the
@@ -41,10 +40,8 @@ Only the Python 3.8+ standard library is required.
 
 Examples:
     python tools/entropy_analysis/analyze_entropy.py --synthetic all
-    python tools/entropy_analysis/analyze_entropy.py --synthetic ldr -n 1000000
-    python tools/entropy_analysis/analyze_entropy.py --file ldr.txt --bits 12
+    python tools/entropy_analysis/analyze_entropy.py --synthetic trng -n 1000000
     python tools/entropy_analysis/analyze_entropy.py --file rng.bin --format u8
-    python tools/entropy_analysis/analyze_entropy.py --serial COM5 --count 200000 --save ldr.txt
 """
 
 from __future__ import annotations
@@ -70,11 +67,10 @@ HEALTH_ALPHA_LOG2 = 20  # false-positive rate alpha = 2^-20 (SP 800-90B 4.4 reco
 MAX_LAG = 10
 
 # Firmware conditioning (src/entropy/entropy_pool.cpp):
-#   SHA-256(domain tag || HW RNG 64 B || include_ldr flag 1 B || 128 LDR samples x uint16)
-FW_DOMAIN_TAG = b"EntropySigner/entropy-pool/v1"
+#   SHA-256(domain tag || HW RNG 64 B)
+FW_DOMAIN_TAG = b"EntropySigner/entropy-pool/v2"
 FW_RNG_BYTES = 64
-FW_LDR_SAMPLES = 128
-FW_N_IN_BITS = 8 * (len(FW_DOMAIN_TAG) + FW_RNG_BYTES + 1 + 2 * FW_LDR_SAMPLES)
+FW_N_IN_BITS = 8 * (len(FW_DOMAIN_TAG) + FW_RNG_BYTES)
 SHA256_BITS = 256
 
 
@@ -119,7 +115,7 @@ _PREFIX = re.compile(r"^\s*[A-Za-z_]+\s*[:=]")
 
 
 def parse_text_samples(lines: Sequence[str]) -> List[int]:
-    """Integers separated by spaces, commas or semicolons; an optional 'LDR:' style
+    """Integers separated by spaces, commas or semicolons; an optional 'NAME:' style
     prefix is accepted and any other line (firmware logs like '[ES] BOOT OK') is skipped."""
     samples: List[int] = []
     for line in lines:
@@ -155,31 +151,21 @@ def synth_trng(n: int, _rng: random.Random) -> Dataset:
     return Dataset("trng", "Referencia ideal: os.urandom (CSPRNG del SO), 8 bits/muestra", list(data), 8)
 
 
-def synth_ldr(n: int, rng: random.Random, attack: bool = False) -> Dataset:
-    """Physical model of the LDR divider read by the 12-bit SAR ADC.
+def synth_biased(n: int, rng: random.Random) -> Dataset:
+    """Each bit is 1 with probability 0.52: a slightly broken physical source."""
+    samples = [sum(1 << k for k in range(8) if rng.random() < 0.52) for _ in range(n)]
+    return Dataset("biased", "Fuente sesgada simulada: cada bit vale 1 con probabilidad 52%", samples, 8)
 
-    Sample period ~210 us (200 us delay in collectLdrSamples() + conversion).
-    Ambient light = slow random-walk drift + 100 Hz flicker (lamps on 50 Hz
-    mains, Argentina) + Gaussian ADC/thermal noise of a few LSB.
-    attack=True models a flashlight pressed against the sensor: the divider
-    saturates and the ADC sticks at full scale.
-    """
-    ts = 210e-6
-    level = 4095.0 if attack else 1800.0
-    flicker = 3.0 if attack else 25.0
-    noise_sigma = 0.35 if attack else 2.5
-    phase = rng.uniform(0, 2 * math.pi)
+
+def synth_stuck(n: int, rng: random.Random) -> Dataset:
+    """A failing noise source: 90% of the time it repeats the previous byte."""
     samples = []
-    for i in range(n):
-        if not attack:
-            level = min(3800.0, max(300.0, level + rng.gauss(0, 0.05)))
-        v = level + flicker * math.sin(2 * math.pi * 100.0 * i * ts + phase) + rng.gauss(0, noise_sigma)
-        samples.append(min(4095, max(0, int(round(v)))))
-    if attack:
-        desc = "Simulacion LDR bajo ataque: linterna satura el divisor, ADC pegado en 4095"
-        return Dataset("ldr-attack", desc, samples, 12)
-    desc = "Simulacion LDR: ADC 12 bits, deriva lenta + parpadeo 100 Hz (red 50 Hz) + ruido ~2.5 LSB"
-    return Dataset("ldr", desc, samples, 12)
+    value = rng.randrange(256)
+    for _ in range(n):
+        if rng.random() < 0.1:
+            value = rng.randrange(256)
+        samples.append(value)
+    return Dataset("stuck", "RNG roto simulado: repite el byte anterior el 90% de las veces", samples, 8)
 
 
 def synth_sha256_counter(n: int, _rng: random.Random) -> Dataset:
@@ -194,8 +180,8 @@ def synth_sha256_counter(n: int, _rng: random.Random) -> Dataset:
 
 SYNTHETIC = {
     "trng": synth_trng,
-    "ldr": lambda n, r: synth_ldr(n, r, attack=False),
-    "ldr-attack": lambda n, r: synth_ldr(n, r, attack=True),
+    "biased": synth_biased,
+    "stuck": synth_stuck,
     "sha256-counter": synth_sha256_counter,
 }
 
@@ -696,27 +682,25 @@ def diagnose(an: Analysis) -> List[str]:
     return out
 
 
-def print_conditioning(ldr_h: Optional[float]) -> None:
+def print_conditioning(rng_h: Optional[float]) -> None:
     line = "=" * 78
     print()
     print(line)
     print(" ACONDICIONAMIENTO SHA-256 DEL FIRMWARE (src/entropy/entropy_pool.cpp)")
     print(line)
-    print(f"  entrada: tag ({len(FW_DOMAIN_TAG)} B) || RNG HW ({FW_RNG_BYTES} B) || flag (1 B) || "
-          f"{FW_LDR_SAMPLES} muestras LDR x 2 B  ->  n_in = {FW_N_IN_BITS} bits")
+    print(f"  entrada: tag ({len(FW_DOMAIN_TAG)} B) || RNG HW ({FW_RNG_BYTES} B)  ->  n_in = {FW_N_IN_BITS} bits")
     print(f"  salida:  n_out = {SHA256_BITS} bits, ancho interno nw = {SHA256_BITS} (SHA-256, FIPS 180-4)")
     print("  h_out segun SP 800-90B 3.1.5.1.2 (componente de acondicionamiento aprobado):")
     rows: List[Tuple[str, float]] = [
-        (f"RNG HW a entropia completa ({FW_RNG_BYTES} B), LDR acreditado en 0 (politica)", 8.0 * FW_RNG_BYTES),
-        ("RNG HW con solo 256 bits efectivos, sin margen", 256.0),
-        ("RNG HW con solo 128 bits efectivos, LDR en 0", 128.0),
+        (f"RNG HW a entropia completa ({FW_RNG_BYTES} B)", 8.0 * FW_RNG_BYTES),
     ]
-    if ldr_h is not None:
-        ldr_total = FW_LDR_SAMPLES * ldr_h
-        rows.append((f"RNG HW completo + LDR medido ({FW_LDR_SAMPLES} x {ldr_h:.3f} = {ldr_total:.1f} bits)",
-                     8.0 * FW_RNG_BYTES + ldr_total))
-        rows.append(("RNG HW comprometido, solo LDR medido (optimista: sin atacante, NO acreditado)", ldr_total))
-    rows.append(("RNG HW comprometido y LDR saturado por el atacante", 0.0))
+    if rng_h is not None:
+        rows.append((f"RNG HW medido ({FW_RNG_BYTES} x {rng_h:.3f} bits/byte)", FW_RNG_BYTES * rng_h))
+    rows += [
+        ("RNG HW con solo 256 bits efectivos, sin margen", 256.0),
+        ("RNG HW con solo 128 bits efectivos", 128.0),
+        ("RNG HW roto (salida constante)", 0.0),
+    ]
     for label, h_in in rows:
         print(f"    h_in = {h_in:7.1f}  ->  h_out = {conditioned_entropy(h_in):7.2f} bits   {label}")
     print("  SHA-256 nunca produce mas entropia que la de su entrada: h_out <= min(h_in, 256).")
@@ -728,25 +712,21 @@ CONCLUSIONS = """\
     mide exactamente ese esfuerzo. Shannon promedia y siempre es >= min-entropia,
     por eso sobrestima la seguridad (ver brecha en la seccion [3]).
 
- 2. El LDR es solo una fuente complementaria. Su senal esta dominada por la luz
-    ambiente, que es lenta, periodica (parpadeo de 100 Hz por la red de 50 Hz) y
-    sobre todo CONTROLABLE desde afuera: una linterna, la oscuridad total o un
-    LED modulado fuerzan la lectura (fuente 'ldr-attack': ADC pegado en 4095,
-    entropia ~0). La poca variabilidad util esta en los bits bajos y proviene
-    del ruido termico/cuantizacion del ADC, no de la luz. Ademas las muestras
-    estan autocorrelacionadas (no IID) y no existe un modelo estocastico
-    validado del sensor, que SP 800-90B 3.2.2 exige para acreditar entropia.
-    Por eso el firmware le acredita 0 bits: suma defensa en profundidad pero
-    la seguridad descansa en el RNG de hardware del ESP32-S3.
+ 2. La unica fuente es el RNG de hardware del ESP32. Segun el TRM (cap. 18) y
+    la documentacion de ESP-IDF, mezcla ruido termico del SAR ADC con la
+    diferencia entre dos relojes independientes, y solo es verdaderamente
+    aleatorio con WiFi/BT encendidos o con bootloader_random_enable() activo;
+    el firmware usa esto ultimo y espera >= 2 us entre palabras de 32 bits.
+    Las fuentes 'biased' y 'stuck' muestran como se ve una fuente rota: la
+    primera falla los tests de uniformidad y la segunda los health tests.
 
  3. Por que el acondicionador SHA-256 es imprescindible. Ninguna fuente fisica
     entrega bits uniformes e independientes; SHA-256 actua como extractor:
-    comprime n_in = 2800 bits de entrada parcialmente impredecible en 256 bits
-    casi uniformes, y combina las fuentes de modo que la salida es impredecible
-    si al menos una de ellas lo es (siempre que el atacante no controle una con
-    conocimiento de la otra). SP 800-90B 3.1.5.1.1 lo admite como componente de
+    comprime n_in = 744 bits de entrada (512 del RNG + el tag) en 256 bits
+    casi uniformes. SP 800-90B 3.1.5.1.1 lo admite como componente de
     acondicionamiento aprobado; la tabla anterior muestra que la salida solo
-    alcanza ~256 bits si la entrada aporta al menos esa cantidad (+ margen).
+    alcanza ~256 bits si la entrada aporta al menos esa cantidad (+ 64 bits de
+    margen, SP 800-90C): por eso se piden 512 bits para sacar 256.
 
  4. Los tests estadisticos no prueban aleatoriedad. La fuente 'sha256-counter'
     (SHA-256 de un contador) supera chi-cuadrado, autocorrelacion y los
@@ -793,7 +773,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     src.add_argument("--serial", metavar="PORT", help="puerto serie (requiere pyserial), p.ej. COM5 o /dev/ttyUSB0")
     parser.add_argument("--format", default="auto", choices=["auto", "u8", "u16le", "u16be", "text"],
                         help="formato del archivo (auto: .txt/.csv/.log -> text, otro -> u8)")
-    parser.add_argument("--bits", type=int, help="bits por muestra (12 para el ADC del LDR)")
+    parser.add_argument("--bits", type=int, help="bits por muestra (8 para bytes del RNG)")
     parser.add_argument("--lsb", type=int, metavar="K", help="analizar solo los K bits menos significativos")
     parser.add_argument("-n", "--count", type=int, default=200_000, help="muestras a generar/capturar")
     parser.add_argument("--seed", type=int, default=2026, help="semilla de las simulaciones (reproducibles)")
@@ -837,9 +817,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if len(analyses) > 1:
         print_comparison(analyses)
 
-    ldr = next((a for a in analyses if a.name == "ldr"), None)
-    ldr_h = ldr.h_initial if ldr else (analyses[0].h_initial if analyses[0].bits == 12 else None)
-    print_conditioning(ldr_h)
+    rng_h = analyses[0].h_initial if analyses[0].bits == 8 else None
+    print_conditioning(rng_h)
     print()
     print("=" * 78)
     print(" CONCLUSIONES")

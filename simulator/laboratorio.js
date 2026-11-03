@@ -11,7 +11,6 @@
     const enc = new TextEncoder();
     const $ = (id) => document.getElementById(id);
 
-    const LDR_SAMPLES = 128;
     const SECONDS_PER_YEAR = 3.156e7;
 
     let current = null;
@@ -34,28 +33,6 @@
 
     function kv(rows) {
         return `<dl class="kv">${rows.map(([k, v, c = ""]) => `<dt>${k}</dt><dd class="${c}">${v}</dd>`).join("")}</dl>`;
-    }
-
-    function gaussian() {
-        const u = 1 - Math.random();
-        return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
-    }
-
-    // Same physical model as synth_ldr() in tools/entropy_analysis/analyze_entropy.py:
-    // slow drift + 100 Hz flicker (50 Hz mains) + a few LSB of ADC noise; attack = flashlight.
-    function synthLdr(n, attack = false) {
-        const ts = 210e-6;
-        let level = attack ? 4095 : 1800 + 400 * (Math.random() - 0.5);
-        const flicker = attack ? 3 : 25;
-        const sigma = attack ? 0.35 : 2.5;
-        const phase = Math.random() * 2 * Math.PI;
-        const out = new Uint16Array(n);
-        for (let i = 0; i < n; i++) {
-            if (!attack) level = Math.min(3800, Math.max(300, level + 0.05 * gaussian()));
-            const v = level + flicker * Math.sin(2 * Math.PI * 100 * i * ts + phase) + sigma * gaussian();
-            out[i] = Math.min(4095, Math.max(0, Math.round(v)));
-        }
-        return out;
     }
 
     // ------------------------------------------------------- statistics ---
@@ -184,6 +161,19 @@
         return out;
     }
 
+    // Each bit is 1 with probability 0.52: a slightly broken physical source.
+    function biasedBits(n) {
+        const out = new Uint8Array(n);
+        const u = new Uint32Array(8);
+        for (let i = 0; i < n; i++) {
+            crypto.getRandomValues(u);
+            let b = 0;
+            for (let k = 0; k < 8; k++) if (u[k] < 0.52 * 2 ** 32) b |= 1 << k;
+            out[i] = b;
+        }
+        return out;
+    }
+
     function browserRng(n) {
         const out = new Uint8Array(n);
         for (let off = 0; off < n; off += 65536) crypto.getRandomValues(out.subarray(off, Math.min(n, off + 65536)));
@@ -195,18 +185,14 @@
         const status = $("stats-status");
         const sources = [
             { name: "RNG (CSPRNG del navegador)", note: "equivale al RNG de hardware", bits: 8, make: async () => browserRng(n) },
-            { name: "LDR crudo (simulado)", note: "ADC 12 bits, luz ambiente", bits: 12, make: async () => synthLdr(n) },
-            { name: "LDR con linterna (ataque)", note: "divisor saturado", bits: 12, make: async () => synthLdr(n, true) },
+            { name: "Fuente sesgada (simulada)", note: "cada bit vale 1 con probabilidad 52%", bits: 8, make: async () => biasedBits(n) },
             { name: "SHA-256(contador)", note: "predecible a prop&oacute;sito", bits: 8, make: () => sha256Counter(n) },
         ];
         if (dev.connected()) {
-            const nRng = Math.min(n, 20000), nLdr = Math.min(n, 10000);
-            const progress = (what) => (done, total) => (status.textContent = `recibiendo ${what} de la ESP32: ${done}/${total}`);
+            const nRng = Math.min(n, 20000);
             sources.unshift(
                 { name: "RNG de la ESP32 (REAL)", note: `${nRng.toLocaleString("es-AR")} bytes por USB`, bits: 8, real: true,
-                    make: () => dev.getRng(nRng, progress("bytes del RNG")) },
-                { name: "ADC GPIO34 de la ESP32 (REAL)", note: `${nLdr.toLocaleString("es-AR")} lecturas, 200 &micro;s entre cada una`, bits: 12, real: true,
-                    make: () => dev.getLdr(nLdr, 200, progress("lecturas del ADC")) });
+                    make: () => dev.getRng(nRng, (done, total) => (status.textContent = `recibiendo bytes del RNG de la ESP32: ${done}/${total}`)) });
         }
         const rows = [];
         try {
@@ -226,6 +212,7 @@
             const r = s.r;
             if (s.name.startsWith("SHA")) return '<span class="pill warn">pasa todo, pero 0 bits reales</span>';
             if (r.longest >= r.rctCutoff) return '<span class="pill bad">health test FALLA: fuente atascada</span>';
+            if (Math.min(r.pMonobit, r.pRuns) < 0.01) return '<span class="pill bad">FALLA NIST SP 800-22: no es uniforme</span>';
             // MCV is an upper-bound estimator: even ideal data scores ~0.94-0.97 of the maximum at 50k-200k samples.
             if (r.hMin / r.bits > 0.9) return '<span class="pill ok">entrop&iacute;a completa</span>';
             return `<span class="pill warn">parcial: ${(100 * r.hMin / r.bits).toFixed(0)}% del m&aacute;ximo</span>`;
@@ -248,16 +235,16 @@
             <h3>C&oacute;mo leer la tabla</h3>
             <ul style="margin-left:20px;font-size:13px;color:var(--muted)">
                 <li><b>Min-entrop&iacute;a (NIST SP 800-90B &sect;6.3.1):</b> bits impredecibles por muestra en el peor caso. El RNG da ~8 de 8.
-                    El LDR da pocos bits de 12 posibles y con linterna casi 0.</li>
+                    Con un sesgo de solo 52% ya se pierde parte de la entrop&iacute;a por byte.</li>
                 <li><b>Monobit y rachas (NIST SP 800-22):</b> &iquest;hay tantos 1 como 0? &iquest;se alternan como deber&iacute;an? Un p &lt; 0,01 (rojo) rechaza que la fuente sea uniforme.</li>
                 <li><b>&chi;&sup2;:</b> &iquest;todos los valores aparecen con la misma frecuencia?</li>
-                <li><b>Autocorrelaci&oacute;n:</b> si una muestra predice la siguiente (en rojo si supera la banda del 99%). La luz cambia lento, por eso el LDR falla ac&aacute;.</li>
-                <li><b>Racha m&aacute;xima (Repetition Count Test, &sect;4.4.1):</b> si el mismo valor se repite demasiadas veces seguidas, la fuente se declara rota. Detecta el ataque con linterna.</li>
+                <li><b>Autocorrelaci&oacute;n:</b> si una muestra predice la siguiente (en rojo si supera la banda del 99%).</li>
+                <li><b>Racha m&aacute;xima (Repetition Count Test, &sect;4.4.1):</b> si el mismo valor se repite demasiadas veces seguidas, la fuente se declara rota (por ejemplo, un RNG que se qued&oacute; trabado).</li>
                 <li><b>SHA-256(contador)</b> pasa todas las pruebas y sin embargo es 100% predecible: <b>las pruebas estad&iacute;sticas pueden refutar la aleatoriedad, nunca demostrarla.</b>
                     Por eso la seguridad se apoya en una fuente f&iacute;sica justificada (RNG de hardware) y no en que &laquo;los n&uacute;meros parecen aleatorios&raquo;.</li>
             </ul>
-            ${rows.some((s) => s.real) ? `<div class="note">Las filas verdes son datos <b>reales de la placa</b>. Si el LDR todav&iacute;a no est&aacute;
-                conectado, GPIO34 queda flotando y lo que se mide es ruido del ADC, no luz: por eso al LDR se le acreditan 0 bits.</div>` : ""}
+            ${rows.some((s) => s.real) ? `<div class="note">La fila verde son datos <b>reales de la placa</b>, le&iacute;dos con el mismo
+                c&oacute;digo que usa el firmware para generar la wallet.</div>` : ""}
             <div class="note">Sin la placa conectada, la fila &laquo;RNG&raquo; usa el generador del navegador. Para muestras m&aacute;s grandes (&ge; 10<sup>6</sup>)
                 se capturan por USB y se analizan con <code>python tools/entropy_analysis/analyze_entropy.py</code>, que agrega los estimadores
                 Lag Prediction y Collision de NIST.</div>`;
@@ -265,33 +252,22 @@
 
     // --------------------------------------------------------- sections ---
 
-    function renderSources(rng, ldr, origin) {
+    function renderSources(rng, origin) {
         if (!rng) {
-            $("out-sources").innerHTML = '<p class="note">Entrop&iacute;a fijada a mano o importada: las fuentes f&iacute;sicas no se usaron en esta corrida. Eleg&iacute; &laquo;Nueva: RNG + LDR simulado&raquo; para verlas.</p>';
+            $("out-sources").innerHTML = '<p class="note">Entrop&iacute;a fijada a mano: el RNG no se us&oacute; en esta corrida. Eleg&iacute; &laquo;Nueva: RNG simulado&raquo; o conect&aacute; la ESP32 para verlo.</p>';
             return;
         }
-        const min = Math.min(...ldr), max = Math.max(...ldr);
-        const mean = ldr.reduce((a, b) => a + b, 0) / ldr.length;
-        const pad = Math.max(4, (max - min) * 0.15);
-        const pts = Array.from(ldr, (v, i) => `${(i / (ldr.length - 1)) * 1000},${90 - ((v - min + pad) / (max - min + 2 * pad)) * 90}`).join(" ");
         const ones = bitsOf(rng).split("").filter((b) => b === "1").length;
         const real = origin === "esp32";
         $("out-sources").innerHTML = `
             <p class="pill ${real ? "ok" : "warn"}">${real
-                ? "Bytes REALES: le&iacute;dos por USB del RNG de hardware y del ADC (GPIO34) de la ESP32"
+                ? "Bytes REALES: le&iacute;dos por USB del RNG de hardware de la ESP32"
                 : "Bytes SIMULADOS en el navegador: la placa no particip&oacute;"}</p>
             <h3>RNG de hardware: ${C.HW_RNG_BYTES} bytes = ${8 * C.HW_RNG_BYTES} bits</h3>
             <div class="hex secret">${C.toHex(rng).match(/.{1,64}/g).join("<br>")}</div>
             ${bitGrid(bitsOf(rng))}
             <p class="muted" style="font-size:13px">${ones} unos y ${512 - ones} ceros (se esperan ~256 &plusmn; 11). Se piden 512 bits para
-                sacar 256: NIST SP 800-90C pide que la entrada tenga al menos 64 bits m&aacute;s de los que se extraen.</p>
-            <h3>LDR: ${LDR_SAMPLES} lecturas del ADC de 12 bits (0&ndash;4095)</h3>
-            <svg class="spark" viewBox="0 0 1000 90" preserveAspectRatio="none">
-                <polyline points="${pts}" fill="none" stroke="#00e5ff" stroke-width="2" vector-effect="non-scaling-stroke"/>
-            </svg>
-            <p class="muted" style="font-size:13px">m&iacute;nimo ${min}, m&aacute;ximo ${max}, media ${mean.toFixed(1)}. ${real
-                ? "Lecturas reales del pin. Si el LDR todav&iacute;a no est&aacute; conectado, el pin flota y esto es ruido del ADC, no luz."
-                : "La variaci&oacute;n es de pocas unidades: viene del parpadeo de las l&aacute;mparas (100 Hz) y del ruido del ADC. Por eso aporta poca entrop&iacute;a."}</p>`;
+                sacar 256: NIST SP 800-90C pide que la entrada tenga al menos 64 bits m&aacute;s de los que se extraen.</p>`;
     }
 
     async function renderConditioning(input, entropy) {
@@ -301,39 +277,37 @@
         }
         const parts = [
             ["tag", input.tag.length, "#b48cff"],
-            ["RNG", input.rng.length, "#00e5ff"],
-            ["flag", input.flag.length, "#ffc857"],
-            ["LDR 128 &times; uint16", input.ldrBytes.length, "#00ff9c"],
+            ["RNG de hardware", input.rng.length, "#00e5ff"],
         ];
         const total = input.all.length;
         $("out-conditioning").innerHTML = `
             <div class="layout">${parts.map(([n, len, col]) => `<div style="flex:${len};background:${col}" title="${n}: ${len} bytes">${n} ${len} B</div>`).join("")}</div>
             <p class="muted" style="font-size:13px">Entrada: ${total} bytes = ${8 * total} bits. El <i>tag</i> &laquo;${new TextDecoder().decode(input.tag)}&raquo; separa
                 este uso de SHA-256 de cualquier otro (checksum BIP-39, Base58Check).</p>
-            <div class="formula">entrop&iacute;a = SHA-256( tag || RNG || flag || LDR )</div>
+            <div class="formula">entrop&iacute;a = SHA-256( tag || RNG )</div>
             ${kv([["Entrop&iacute;a final (256 bits)", C.toHex(entropy), "secret"]])}
             ${bitGrid(bitsOf(entropy))}
             <h3>Efecto avalancha</h3>
-            <p class="muted" style="font-size:13px">Si cambia <b>un solo bit</b> de una sola lectura del LDR, cambia en promedio la mitad de los 256 bits de salida.
+            <p class="muted" style="font-size:13px">Si cambia <b>un solo bit</b> de los 512 del RNG, cambia en promedio la mitad de los 256 bits de salida.
                 Por eso nadie puede &laquo;ajustar&raquo; la entrada para obtener una salida elegida.</p>
-            <div class="row"><button id="avalanche">Cambiar 1 bit de una lectura del LDR</button><span id="avalanche-info" class="muted"></span></div>
+            <div class="row"><button id="avalanche">Cambiar 1 bit del RNG</button><span id="avalanche-info" class="muted"></span></div>
             <div id="avalanche-grid"></div>
             <h3>Presupuesto de entrop&iacute;a</h3>
             <table>
                 <tr><th>Fuente</th><th>Bits en la entrada</th><th>Bits acreditados</th><th>Motivo</th></tr>
+                <tr><td>Tag de dominio</td><td class="num">${8 * input.tag.length}</td><td class="num">0</td><td>texto fijo y p&uacute;blico</td></tr>
                 <tr><td>RNG de hardware</td><td class="num">512</td><td class="num ok">512</td><td>fuente f&iacute;sica documentada por Espressif</td></tr>
-                <tr><td>LDR</td><td class="num">2048</td><td class="num">0</td><td>un atacante con linterna la controla</td></tr>
-                <tr><td><b>Salida SHA-256</b></td><td class="num">2800</td><td class="num ok"><b>256</b></td><td>512 &ge; 256 + 64 de margen (SP 800-90C)</td></tr>
+                <tr><td><b>Salida SHA-256</b></td><td class="num">${8 * total}</td><td class="num ok"><b>256</b></td><td>512 &ge; 256 + 64 de margen (SP 800-90C)</td></tr>
             </table>`;
         $("avalanche").onclick = async () => {
-            const ldr = Uint16Array.from(current.ldr);
-            const i = Math.floor(Math.random() * ldr.length);
-            const bit = Math.floor(Math.random() * 12);
-            ldr[i] ^= 1 << bit;
-            const other = await C.sha256(C.conditioningInput(current.rng, ldr).all);
+            const rng = Uint8Array.from(current.rng);
+            const i = Math.floor(Math.random() * rng.length);
+            const bit = Math.floor(Math.random() * 8);
+            rng[i] ^= 1 << bit;
+            const other = await C.sha256(C.conditioningInput(rng).all);
             const a = bitsOf(entropy), b = bitsOf(other);
             const flips = [...a].filter((x, k) => x !== b[k]).length;
-            $("avalanche-info").innerHTML = `lectura #${i}: ${current.ldr[i]} &rarr; ${ldr[i]} (bit ${bit}) &middot; cambiaron <b class="bad">${flips}</b> de 256 bits (${(flips / 2.56).toFixed(1)}%)`;
+            $("avalanche-info").innerHTML = `byte #${i}: ${current.rng[i]} &rarr; ${rng[i]} (bit ${bit}) &middot; cambiaron <b class="bad">${flips}</b> de 256 bits (${(flips / 2.56).toFixed(1)}%)`;
             $("avalanche-grid").innerHTML = `<div class="hex">${C.toHex(other)}</div>` + bitGrid(a, (x, k) => (x !== b[k] ? "flip" : "same"));
         };
     }
@@ -582,8 +556,8 @@
             </div>
             <h3>Medidas del firmware</h3>
             <ul style="margin-left:20px;font-size:14px">
-                <li>Al LDR se le acreditan <b>0 bits</b>, y se lee <b>antes</b> que el RNG: un atacante que controle la luz no puede adaptarse a la salida del RNG.</li>
-                <li>Las fuentes se combinan con <b>SHA-256 con separaci&oacute;n de dominio</b>: la salida es impredecible si al menos una fuente lo es.</li>
+                <li>La &uacute;nica fuente es el <b>RNG de hardware</b>, le&iacute;do con <code>bootloader_random_enable()</code> activo: as&iacute; Espressif garantiza ruido f&iacute;sico real aun sin WiFi ni Bluetooth.</li>
+                <li>Se piden <b>512 bits</b> y se comprimen con <b>SHA-256 con separaci&oacute;n de dominio</b> a 256: el margen de 256 bits absorbe cualquier sesgo residual (SP 800-90C).</li>
                 <li>Entrop&iacute;a, seed y claves privadas se <b>borran de la RAM</b> apenas se usan (<code>secureMemzero</code>); la frase, al salir de su pantalla o a los 2 minutos.</li>
                 <li><b>Sin conexi&oacute;n</b> (air-gapped): en modo PRODUCTION no hay WiFi, Bluetooth ni secretos por el puerto serie; las direcciones salen solo por pantalla y QR.</li>
                 <li>Cada primitiva se valida contra los <b>vectores oficiales</b> (BIP-39, BIP-32, EIP-55, NIST) en <code>tests/</code>, y este laboratorio los repite en el navegador.</li>
@@ -598,19 +572,16 @@
     function renderOrigin(source, ref, passphrase) {
         const fromSimulator = source === "imported" || (imported && source === "manual" && $("manual").value === C.toHex(imported.entropy));
         const texts = {
-            esp32: "Wallet <u>nueva</u> generada en esta p&aacute;gina con bytes <b>reales</b> del RNG y del ADC de la ESP32 conectada por USB.",
-            new: "Wallet <u>nueva</u> generada por el laboratorio con RNG + LDR simulado. <b>No</b> es la del simulador de pantalla.",
+            esp32: "Wallet <u>nueva</u> generada en esta p&aacute;gina con bytes <b>reales</b> del RNG de hardware de la ESP32 conectada por USB.",
+            new: "Wallet <u>nueva</u> generada por el laboratorio con RNG simulado en el navegador. <b>No</b> es la del simulador de pantalla.",
             zero: "Vector de prueba oficial (entrop&iacute;a 0x00&hellip;00): sirve para comparar con implementaciones de referencia.",
             manual: "Entrop&iacute;a ingresada a mano.",
         };
         const el = $("origin");
         el.className = "origin " + (fromSimulator || source === "esp32" ? "imported" : "local");
-        const importedOrigin = imported && imported.origin === "esp32"
-            ? " Esos bytes vinieron de la <b>ESP32 real</b> por USB."
-            : " Esos bytes fueron <b>simulados</b> en el navegador (la placa no estaba conectada).";
         el.innerHTML = (fromSimulator
             ? "&#10003; Mostrando <u>la misma wallet</u> que gener&oacute; el simulador de pantalla" +
-              (source === "imported" ? ", reproducida desde sus mismos bytes del RNG y lecturas del LDR." + importedOrigin
+              (source === "imported" ? ", reproducida desde los mismos bytes del RNG que mand&oacute; la <b>ESP32 real</b> por USB."
                   : " (solo se recibi&oacute; la entrop&iacute;a).")
             : texts[source]) +
             `<br>BTC <b>${ref.btc}</b> &middot; ETH <b>${ref.eth}</b>` +
@@ -624,7 +595,7 @@
             const raw = localStorage.getItem(LAB_KEY);
             if (!raw) return null;
             const d = JSON.parse(raw);
-            return validateImport(d.entropy, d.rng, d.ldr, d.origin);
+            return validateImport(d.entropy, d.rng);
         } catch (e) {
             return null;
         }
@@ -632,19 +603,16 @@
 
     function parseImport() {
         const params = new URLSearchParams(location.hash.slice(1));
-        return validateImport(params.get("entropia"), params.get("rng"),
-            (params.get("ldr") || "").split(",").filter(Boolean).map(Number), params.get("origen"));
+        return validateImport(params.get("entropia"), params.get("rng"));
     }
 
-    function validateImport(entropyHex, rngHex, ldr, origin) {
+    // The screen simulator only generates with the board connected, so its RNG bytes are always real.
+    function validateImport(entropyHex, rngHex) {
         const hex = String(entropyHex || "").toLowerCase();
         if (!/^[0-9a-f]{64}$/.test(hex)) return null;
         rngHex = String(rngHex || "").toLowerCase();
-        ldr = Array.isArray(ldr) ? ldr : [];
-        const complete = new RegExp(`^[0-9a-f]{${2 * C.HW_RNG_BYTES}}$`).test(rngHex) &&
-            ldr.length === LDR_SAMPLES && ldr.every((v) => Number.isInteger(v) && v >= 0 && v <= 4095);
-        return complete
-            ? { entropy: C.fromHex(hex), rng: C.fromHex(rngHex), ldr: Uint16Array.from(ldr), origin: origin === "esp32" ? "esp32" : "simulado" }
+        return new RegExp(`^[0-9a-f]{${2 * C.HW_RNG_BYTES}}$`).test(rngHex)
+            ? { entropy: C.fromHex(hex), rng: C.fromHex(rngHex), origin: "esp32" }
             : { entropy: C.fromHex(hex), entropyOnly: true };
     }
 
@@ -657,27 +625,24 @@
         try {
             if ($("source").value === "imported" && (!imported || imported.entropyOnly)) selectSource("new");
             const source = $("source").value;
-            let rng = null, ldr = null, input = null, entropy, origin = "simulado";
+            let rng = null, input = null, entropy, origin = "simulado";
             if (source === "esp32") {
                 if (!dev.connected()) await connectDevice();
-                ldr = await dev.getLdr(LDR_SAMPLES, 200);
                 rng = await dev.getRng(C.HW_RNG_BYTES);
                 origin = "esp32";
-                input = C.conditioningInput(rng, ldr);
+                input = C.conditioningInput(rng);
                 entropy = await C.sha256(input.all);
             } else if (source === "imported") {
                 origin = imported.origin;
                 rng = imported.rng;
-                ldr = imported.ldr;
-                input = C.conditioningInput(rng, ldr);
+                input = C.conditioningInput(rng);
                 entropy = await C.sha256(input.all);
                 if (C.toHex(entropy) !== C.toHex(imported.entropy)) {
                     throw new Error("Los datos importados no reproducen la entropía del simulador.");
                 }
             } else if (source === "new") {
                 rng = crypto.getRandomValues(new Uint8Array(C.HW_RNG_BYTES));
-                ldr = synthLdr(LDR_SAMPLES);
-                input = C.conditioningInput(rng, ldr);
+                input = C.conditioningInput(rng);
                 entropy = await C.sha256(input.all);
             } else if (source === "zero") {
                 entropy = new Uint8Array(32);
@@ -687,9 +652,9 @@
                 entropy = C.fromHex(hex);
             }
             const passphrase = $("passphrase").value;
-            current = { rng, ldr, entropy };
+            current = { rng, entropy };
 
-            renderSources(rng, ldr, origin);
+            renderSources(rng, origin);
             await renderConditioning(input, entropy);
             const mnemonic = await renderBip39(entropy);
             await renderLastWords(entropy);

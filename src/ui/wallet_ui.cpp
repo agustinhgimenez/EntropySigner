@@ -8,7 +8,6 @@
 #include "bitcoin/bitcoin.h"
 #include "config/build_config.h"
 #include "entropy/entropy_pool.h"
-#include "entropy/ldr_entropy.h"
 #include "ethereum/ethereum.h"
 #include "qr/qr_render.h"
 #include "security/secure_log.h"
@@ -25,8 +24,6 @@ namespace {
 constexpr uint32_t kBootTimeoutMs = 2500;
 constexpr uint32_t kTapGuardMs = 250;  // ignore taps right after a screen change
 constexpr uint32_t kMnemonicTimeoutMs = 120000;  // 2-min inactivity timeout: wipes mnemonic and resets to IDLE
-constexpr uint32_t kLdrSamplePeriodMs = 40;
-constexpr uint32_t kLdrRedrawPeriodMs = 120;
 
 // ---------------------------------------------------------------- layout ---
 
@@ -42,20 +39,10 @@ constexpr Button kWideButton = {32, 412, 256, 52};
 constexpr Button kLeftButton = {kMargin, 412, 136, 52};
 constexpr Button kRightButton = {168, 412, 136, 52};
 
-// IDLE sensor card
+// IDLE entropy-source card
 constexpr int kCardTop = 108;
 constexpr int kCardHeight = 214;
-constexpr int kBarX = 32;
-constexpr int kBarWidth = 256;
-constexpr int kBarHeight = 14;
-constexpr int kValueY = 162;
-constexpr int kLevelBarY = 192;
-constexpr int kVariationLabelY = 234;
-constexpr int kVariationBarY = 252;
-
-constexpr uint16_t kAdcMax = 4095;
-constexpr uint16_t kVariationFullScale = 512;  // max-min counts for a full bar
-constexpr size_t kLdrWindow = 32;
+constexpr int kCardTextX = 32;
 
 // Address screens
 constexpr int kQrCenterY = 215;
@@ -87,12 +74,6 @@ uint32_t g_state_entered_ms = 0;
 bool g_touch_was_down = false;
 Session g_session;
 const char* g_error = "";
-
-uint16_t g_ldr_window[kLdrWindow];
-size_t g_ldr_count = 0;
-size_t g_ldr_next = 0;
-uint32_t g_last_ldr_sample_ms = 0;
-uint32_t g_last_ldr_redraw_ms = 0;
 
 void wipeSession() {
     security::secureMemzero(&g_session, sizeof(g_session));
@@ -137,17 +118,6 @@ void drawButton(const Button& b, const char* label, uint16_t accent) {
     lcd.drawString(label, b.x + b.w / 2, b.y + b.h / 2);
 }
 
-void drawBar(int y, uint32_t value, uint32_t full_scale, uint16_t color) {
-    LgfxDevice& lcd = *g_lcd;
-    if (value > full_scale) {
-        value = full_scale;
-    }
-    const int filled = static_cast<int>(value * kBarWidth / full_scale);
-    lcd.fillRect(kBarX, y, filled, kBarHeight, color);
-    lcd.fillRect(kBarX + filled, y, kBarWidth - filled, kBarHeight, g_pal.background);
-    lcd.drawRect(kBarX - 1, y - 1, kBarWidth + 2, kBarHeight + 2, g_pal.grey);
-}
-
 // Returns true once per finger-down (press edge), with its coordinates.
 bool pollTap(int32_t* x, int32_t* y) {
     int32_t tx = 0;
@@ -174,67 +144,24 @@ void drawIdle() {
     lcd.setTextDatum(textdatum_t::middle_left);
     lcd.setFont(&fonts::FreeSans9pt7b);
     lcd.setTextColor(g_pal.grey);
-    lcd.drawString("SENSOR LDR  -  ADC1_CH0", kBarX, kCardTop + 22);
-    lcd.drawString("VARIACION AMBIENTAL", kBarX, kVariationLabelY);
-    lcd.drawString("Pasa la mano sobre el sensor", kBarX, kCardTop + kCardHeight - 22);
-
-    lcd.setTextDatum(textdatum_t::middle_center);
-    lcd.drawString("Fuente principal: RNG de hardware", lcd.width() / 2, 348);
-    lcd.drawString("LDR: fuente adicional + SHA-256", lcd.width() / 2, 372);
-
-    drawButton(kWideButton, "GENERAR WALLET", g_pal.green);
-
-    g_ldr_count = 0;
-    g_ldr_next = 0;
-    g_last_ldr_redraw_ms = 0;
-}
-
-void refreshIdleSensor() {
-    LgfxDevice& lcd = *g_lcd;
-    const uint32_t now = millis();
-
-    if (now - g_last_ldr_sample_ms >= kLdrSamplePeriodMs) {
-        g_last_ldr_sample_ms = now;
-        g_ldr_window[g_ldr_next] = entropy::readLdrRaw();
-        g_ldr_next = (g_ldr_next + 1) % kLdrWindow;
-        if (g_ldr_count < kLdrWindow) {
-            ++g_ldr_count;
-        }
-    }
-    if (g_ldr_count == 0 || now - g_last_ldr_redraw_ms < kLdrRedrawPeriodMs) {
-        return;
-    }
-    g_last_ldr_redraw_ms = now;
-
-    const uint16_t latest = g_ldr_window[(g_ldr_next + kLdrWindow - 1) % kLdrWindow];
-    uint16_t lo = kAdcMax;
-    uint16_t hi = 0;
-    for (size_t i = 0; i < g_ldr_count; ++i) {
-        lo = min(lo, g_ldr_window[i]);
-        hi = max(hi, g_ldr_window[i]);
-    }
-    const uint16_t variation = hi - lo;
-
-    char text[24];
-    lcd.startWrite();
-    lcd.fillRect(kBarX, kValueY - 16, kBarWidth, 32, g_pal.surface);
-    lcd.setTextDatum(textdatum_t::middle_left);
+    lcd.drawString("FUENTE DE ENTROPIA", kCardTextX, kCardTop + 24);
     lcd.setFont(&fonts::FreeSansBold12pt7b);
     lcd.setTextColor(g_pal.cyan);
-    snprintf(text, sizeof(text), "%u", latest);
-    lcd.drawString(text, kBarX, kValueY);
+    lcd.drawString("RNG de hardware", kCardTextX, kCardTop + 62);
     lcd.setFont(&fonts::FreeSans9pt7b);
     lcd.setTextColor(g_pal.grey);
-    lcd.drawString("/ 4095", kBarX + 70, kValueY);
-    drawBar(kLevelBarY, latest, kAdcMax, g_pal.cyan);
-
-    lcd.fillRect(kBarX + 190, kVariationLabelY - 10, kBarWidth - 190, 20, g_pal.surface);
-    lcd.setTextDatum(textdatum_t::middle_right);
+    lcd.drawString("Ruido termico del SAR ADC", kCardTextX, kCardTop + 102);
+    lcd.drawString("64 bytes -> SHA-256", kCardTextX, kCardTop + 132);
     lcd.setTextColor(g_pal.green);
-    snprintf(text, sizeof(text), "%u", variation);
-    lcd.drawString(text, kBarX + kBarWidth, kVariationLabelY);
-    drawBar(kVariationBarY, variation, kVariationFullScale, g_pal.green);
-    lcd.endWrite();
+    lcd.drawString("= 256 bits de entropia", kCardTextX, kCardTop + 162);
+    lcd.setTextColor(g_pal.grey);
+    lcd.drawString("Sin WiFi ni Bluetooth", kCardTextX, kCardTop + kCardHeight - 24);
+
+    lcd.setTextDatum(textdatum_t::middle_center);
+    lcd.drawString("Frase BIP-39 de 24 palabras", lcd.width() / 2, 348);
+    lcd.drawString("Direcciones BTC y ETH", lcd.width() / 2, 372);
+
+    drawButton(kWideButton, "GENERAR WALLET", g_pal.green);
 }
 
 void drawGeneratingStep(int index, const char* label, const char* status, uint16_t status_color) {
@@ -261,7 +188,7 @@ void drawGenerating() {
 // public addresses survive in g_session.
 bool generateWallet() {
     static const char* const kSteps[] = {
-        "Entropia 256 bits (RNG+LDR)", "BIP-39: 24 palabras",       "PBKDF2-HMAC-SHA512 seed",
+        "Entropia 256 bits (RNG HW)",  "BIP-39: 24 palabras",       "PBKDF2-HMAC-SHA512 seed",
         "BIP-32 master key",           "BTC  m/44'/0'/0'/0/0",       "ETH  m/44'/60'/0'/0/0",
     };
     constexpr int kStepCount = sizeof(kSteps) / sizeof(kSteps[0]);
@@ -277,7 +204,7 @@ bool generateWallet() {
 
     wipeSession();
     do {
-        if (!entropy::generateEntropy256(entropy, true)) break;
+        if (!entropy::generateEntropy256(entropy)) break;
         drawGeneratingStep(step, kSteps[step], "OK", g_pal.green);
         ++step;
 
@@ -519,7 +446,6 @@ void updateWallet() {
             break;
 
         case WalletState::IDLE:
-            refreshIdleSensor();
             if (tap && kWideButton.contains(x, y)) {
                 enterState(WalletState::GENERATING);
             }

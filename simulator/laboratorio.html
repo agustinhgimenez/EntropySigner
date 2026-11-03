@@ -161,7 +161,7 @@
             <select id="source" title="Origen de la entropia" autocomplete="off">
                 <option value="imported" id="opt-imported" hidden>Wallet del simulador de pantalla</option>
                 <option value="esp32">Nueva: ESP32 real por USB</option>
-                <option value="new">Nueva: RNG + LDR simulado</option>
+                <option value="new">Nueva: RNG simulado (navegador)</option>
                 <option value="zero">Vector de prueba: entrop&iacute;a 0x00&hellip;00</option>
                 <option value="manual">Entrop&iacute;a manual (64 hex)</option>
             </select>
@@ -174,7 +174,7 @@
     </header>
 
     <nav class="toc">
-        <a href="#s1">1. Fuentes de entrop&iacute;a</a>
+        <a href="#s1">1. Fuente de entrop&iacute;a</a>
         <a href="#s2">2. Acondicionamiento SHA-256</a>
         <a href="#s3">3. Calidad de la entrop&iacute;a</a>
         <a href="#s4">4. BIP-39: bits &rarr; palabras</a>
@@ -193,25 +193,25 @@
         <div id="origin" class="origin"></div>
 
         <section class="step" id="s1">
-            <h2><span class="n">1</span> Fuentes de entrop&iacute;a</h2>
-            <p class="lead">El firmware junta dos fuentes f&iacute;sicas. La <b>principal</b> es el generador de n&uacute;meros
-                aleatorios por hardware del ESP32 (<code>esp_fill_random</code>, ruido del conversor anal&oacute;gico-digital y
-                del reloj). La <b>adicional</b> son 128 lecturas del sensor de luz (LDR). Al LDR se le acreditan
-                <b>0 bits</b>: un atacante con una linterna lo puede controlar, as&iacute; que solo suma defensa en profundidad.</p>
+            <h2><span class="n">1</span> Fuente de entrop&iacute;a</h2>
+            <p class="lead">La &uacute;nica fuente es el generador de n&uacute;meros aleatorios por hardware del ESP32
+                (<code>esp_random</code> con <code>bootloader_random_enable()</code> activo): ruido t&eacute;rmico del conversor
+                anal&oacute;gico-digital (SAR ADC) mezclado con la diferencia entre dos relojes independientes. El firmware pide
+                64 bytes (512 bits) para obtener 256 bits de entrop&iacute;a.</p>
             <div id="out-sources" class="muted">Presion&aacute; &laquo;Generar y explicar&raquo;.</div>
         </section>
 
         <section class="step" id="s2">
             <h2><span class="n">2</span> Acondicionamiento con SHA-256</h2>
             <p class="lead">Ninguna fuente f&iacute;sica da bits perfectamente uniformes. SHA-256 funciona como
-                <b>extractor</b>: comprime 2800 bits parcialmente impredecibles en 256 bits casi uniformes, y la salida es
-                impredecible si <b>al menos una</b> fuente lo es (NIST SP 800-90B &sect;3.1.5).</p>
+                <b>extractor</b>: comprime los 512 bits del RNG (m&aacute;s un tag fijo) en 256 bits casi uniformes. Con el doble de
+                entrada que de salida, la salida conserva 256 bits completos de entrop&iacute;a (NIST SP 800-90B &sect;3.1.5).</p>
             <div id="out-conditioning" class="muted">&mdash;</div>
         </section>
 
         <section class="step" id="s3">
             <h2><span class="n">3</span> &iquest;Tiene buena entrop&iacute;a? Pruebas estad&iacute;sticas</h2>
-            <p class="lead">Se comparan cuatro fuentes con las mismas pruebas que usa
+            <p class="lead">Se comparan varias fuentes con las mismas pruebas que usa
                 <code>tools/entropy_analysis/analyze_entropy.py</code>. Para generar claves importa la
                 <b>min-entrop&iacute;a</b> (&minus;log<sub>2</sub> de la probabilidad del valor m&aacute;s com&uacute;n): mide cu&aacute;nto le cuesta a
                 un atacante adivinar empezando por lo m&aacute;s probable.</p>
