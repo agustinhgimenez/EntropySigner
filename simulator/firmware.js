@@ -443,7 +443,21 @@
             return Math.max(0, MNEMONIC_TIMEOUT_MS - (now - stateEnteredMs));
         }
 
-        return { boot, tap, loop, timeoutRemainingMs, get state() { return state; }, WIDTH, HEIGHT };
+        // Simulator-only: the real device is offline and has no notion of a block explorer.
+        function shownAddress() {
+            const coin = { SHOW_BTC: "btc", SHOW_ETH: "eth" }[state];
+            return coin && session[coin] ? { coin, address: session[coin] } : null;
+        }
+
+        function addressAt(x, y) {
+            const inQr = Math.abs(x - WIDTH / 2) <= QR_BOX / 2 && y >= QR_CENTER_Y - QR_BOX / 2;
+            return inQr && y < LEFT_BUTTON.y - 8 ? shownAddress() : null;
+        }
+
+        return {
+            boot, tap, loop, timeoutRemainingMs, shownAddress, addressAt,
+            get state() { return state; }, WIDTH, HEIGHT,
+        };
     }
 
     window.ESFirmware = { create };

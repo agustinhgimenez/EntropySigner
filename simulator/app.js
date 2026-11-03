@@ -116,7 +116,10 @@
         getRngBytes,
         log: (t) => log(t),
         inspect,
-        onState: (s) => ($("state").textContent = s),
+        onState: (s) => {
+            $("state").textContent = s;
+            updateExplorerHint();
+        },
     };
 
     const canvas = $("lcd");
@@ -131,9 +134,37 @@
         fw.boot();
     }
 
-    canvas.addEventListener("pointerdown", (e) => {
+    const EXPLORERS = {
+        btc: { name: "mempool.space", url: (a) => `https://mempool.space/address/${a}` },
+        eth: { name: "Etherscan", url: (a) => `https://etherscan.io/address/${a}` },
+    };
+
+    function updateExplorerHint() {
+        const hint = $("explorer-hint");
+        const shown = fw.shownAddress();
+        hint.hidden = !shown;
+        if (!shown) return;
+        hint.href = EXPLORERS[shown.coin].url(shown.address);
+        hint.textContent = `Tocá el QR para ver esta dirección en ${EXPLORERS[shown.coin].name} ↗`;
+    }
+
+    function lcdPoint(e) {
         const rect = canvas.getBoundingClientRect();
-        fw.tap(((e.clientX - rect.left) / rect.width) * fw.WIDTH, ((e.clientY - rect.top) / rect.height) * fw.HEIGHT);
+        return [((e.clientX - rect.left) / rect.width) * fw.WIDTH, ((e.clientY - rect.top) / rect.height) * fw.HEIGHT];
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+        const [x, y] = lcdPoint(e);
+        const hit = fw.addressAt(x, y);
+        if (hit) {
+            window.open(EXPLORERS[hit.coin].url(hit.address), "_blank", "noopener");
+            return;
+        }
+        fw.tap(x, y);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+        const hit = fw.addressAt(...lcdPoint(e));
+        canvas.title = hit ? `Ver esta dirección en ${EXPLORERS[hit.coin].name}` : "";
     });
     $("btn-en").addEventListener("click", reset);
     $("touch").addEventListener("change", () => {

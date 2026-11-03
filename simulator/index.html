@@ -54,6 +54,16 @@
             box-shadow: 0 30px 60px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .05);
             width: fit-content;
         }
+        .explorer-hint {
+            display: block;
+            margin-top: 8px;
+            font-size: 12px;
+            text-align: center;
+            color: #22d3ee;
+        }
+        .explorer-hint[hidden] {
+            display: none;
+        }
         .bezel {
             background: #05080b;
             padding: 14px;
@@ -147,6 +157,7 @@
                 <div class="bezel">
                     <canvas id="lcd" width="320" height="480" aria-label="Pantalla simulada; hac&eacute; clic para tocar"></canvas>
                 </div>
+                <a class="explorer-hint" id="explorer-hint" target="_blank" rel="noopener" hidden></a>
                 <div class="device-footer">
                     <span><span class="led"></span>ESP32 DevKit V1</span>
                     <div class="hw-buttons">
