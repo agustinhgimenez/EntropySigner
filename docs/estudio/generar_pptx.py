@@ -192,8 +192,8 @@ text(s, "Un PRNG nunca crea entropía: solo estira la de su semilla.", Inches(0.
 
 # ============================================================ PART 2
 s = new_slide("Nuestro pipeline", P2,
-              "Recorrer el diagrama: 64 bytes del RNG + 128 lecturas del LDR entran a SHA-256 con una etiqueta de "
-              "dominio; salen 256 bits que se convierten en 24 palabras y luego en claves.")
+              "Recorrer el diagrama: los 64 bytes del RNG de hardware (la única fuente) entran a SHA-256 con una "
+              "etiqueta de dominio; salen 256 bits que se convierten en 24 palabras y luego en claves.")
 picture(s, "pipeline.png", Inches(0.5), Inches(1.7), w=Inches(12.3))
 text(s, "Todo depende del primer bloque: el RNG de hardware.", Inches(0.6), Inches(5.6), Inches(12), Inches(0.6), 22,
      GREEN, bold=True)
@@ -225,7 +225,7 @@ text(s, "Fuente: ESP-IDF Programming Guide, “Random Number Generation”", Inc
 
 s = new_slide("Cómo lo usa nuestro firmware", P2,
               "Encendemos el ruido del SAR ADC solo durante la lectura. Mientras está encendido no se puede usar el "
-              "ADC, por eso el LDR se lee antes. Borramos cada palabra de la pila después de copiarla.")
+              "ADC para otra cosa; el firmware no lo usa. Borramos cada palabra de la pila después de copiarla.")
 code = ["void fillRandomBytes(uint8_t* out, size_t len) {",
         "    bootloader_random_enable();         // enciende el ruido del SAR ADC",
         "    for (offset = 0; offset < len; offset += 4) {",
@@ -234,7 +234,7 @@ code = ["void fillRandomBytes(uint8_t* out, size_t len) {",
         "        memcpy(out + offset, &word, ...);",
         "        secureMemzero(&word, 4);        // sin copias en la pila",
         "    }",
-        "    bootloader_random_disable();        // libera el ADC para el LDR",
+        "    bootloader_random_disable();        // apaga la fuente de ruido",
         "}"]
 box = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.6), Inches(1.5), Inches(12.1), Inches(4.0))
 box.fill.solid()
@@ -242,7 +242,7 @@ box.fill.fore_color.rgb = RGBColor(0x05, 0x0A, 0x14)
 box.line.color.rgb = PANEL
 box.adjustments[0] = 0.04
 text(s, code, Inches(0.9), Inches(1.7), Inches(11.6), Inches(3.7), 17, GREEN, font="Consolas")
-text(s, "src/entropy/hw_rng.cpp  ·  el LDR se lee ANTES porque el ADC no puede usarse mientras alimenta al RNG",
+text(s, "src/entropy/hw_rng.cpp  ·  el ADC no puede usarse para otra cosa mientras alimenta al RNG",
      Inches(0.6), Inches(5.75), Inches(12), Inches(0.5), 14, MUTED)
 
 s = new_slide("Lo que encontramos leyendo el manual", P2,
@@ -261,20 +261,20 @@ text(s, "Lección: no alcanza con llamar a “random()”: hay que leer la docum
      Inches(0.6), Inches(5.85), Inches(12), Inches(0.6), 20, AMBER, bold=True)
 
 s = new_slide("Acondicionamiento con SHA-256", P2,
-              "SHA-256 concentra 2800 bits de entrada en 256 uniformes. SP 800-90C pide 64 bits de margen: por eso "
-              "leemos 512 bits del RNG. SHA-256 nunca crea entropía. El LDR tiene 0 bits acreditados: una linterna "
-              "lo controla.")
+              "SHA-256(etiqueta || 64 bytes del RNG): 744 bits de entrada, 512 de ellos aleatorios, en 256 uniformes. "
+              "SP 800-90C pide 64 bits de margen: por eso leemos 512 bits del RNG. SHA-256 nunca crea entropía.")
+text(s, "entropía = SHA-256( \"EntropySigner/entropy-pool/v2\" || 64 bytes del RNG )", Inches(0.6), Inches(1.5),
+     Inches(12.1), Inches(0.6), 18, GREEN, font="Consolas")
 table(s, [["Entropía que entra", "Entropía que sale", "Situación"],
           ["512 bits", "256,0", "RNG completo (diseño)"],
           ["256 bits", "255,0", "Sin margen"],
           ["128 bits", "128,0", "RNG degradado"],
           ["~51 bits", "~51", "Peor caso antes de la corrección"]],
-      Inches(0.6), Inches(1.6), Inches(6.6), [0.33, 0.27, 0.40], size=15)
+      Inches(0.6), Inches(2.3), Inches(6.6), [0.33, 0.27, 0.40], size=15)
 bullets(s, ["h_out ≤ min(h_in, 256): un hash no crea entropía",
             "SP 800-90C: entrada ≥ salida + 64 bits",
-            "LDR: 0 bits acreditados (manipulable con una linterna)"], Inches(7.5), Inches(1.6), Inches(5.3),
-        Inches(3.5), 17)
-picture(s, "ldr.png", Inches(0.6), Inches(4.25), w=Inches(9.3))
+            "Efecto avalancha: 1 bit distinto en el RNG cambia ~128 bits de la salida"], Inches(7.5), Inches(2.3),
+        Inches(5.3), Inches(3.5), 17)
 
 # ============================================================ PART 3
 s = new_slide("¿Cómo se demuestra? Los estándares del NIST", P3,
@@ -325,13 +325,14 @@ text(s, "La seguridad se apoya en una fuente física justificada, no en que “l
      Inches(0.8), Inches(4.4), Inches(11.8), Inches(0.8), 20, MUTED, align=PP_ALIGN.CENTER)
 
 s = new_slide("SP 800-90B: min-entropía y health tests", P3,
-              "Tres estimadores (MCV, Collision, Lag Prediction); se toma el mínimo. El ataque con linterna lleva la "
-              "min-entropía del LDR a 0,3 bits y dispara los health tests: es justo lo que deben detectar.")
-table(s, [["Fuente (200.000 muestras)", "Bits", "Min-entropía", "% del máximo", "Health tests"],
-          ["CSPRNG de referencia", "8", "7,42", "93%", "ok"],
-          ["LDR con luz ambiente (modelo)", "12", "3,16", "26%", "ok"],
-          ["LDR con linterna (ataque)", "12", "0,30", "2,5%", "FALLA"],
-          ["SHA-256(contador)", "8", "7,32", "92%", "ok"]],
+              "Tres estimadores (MCV, Collision, Lag Prediction); se toma el mínimo. Un RNG trabado que repite el "
+              "byte anterior cae a 0,15 bits y dispara los health tests: es justo lo que deben detectar. El sesgo "
+              "chico casi no se ve acá; lo detectan las pruebas de SP 800-22.")
+table(s, [["Fuente (100.000 muestras)", "Bits", "Min-entropía", "% del máximo", "Health tests"],
+          ["CSPRNG de referencia", "8", "7,43", "93%", "ok"],
+          ["Fuente sesgada (52% de unos)", "8", "7,35", "92%", "ok"],
+          ["RNG trabado (simulado)", "8", "0,15", "2%", "FALLA"],
+          ["SHA-256(contador)", "8", "7,27", "91%", "ok"]],
       Inches(0.6), Inches(1.6), Inches(12.1), [0.36, 0.1, 0.18, 0.18, 0.18], size=16,
       highlight={(3, 4): RGBColor(0x4A, 0x14, 0x20), (3, 2): RGBColor(0x4A, 0x14, 0x20)})
 bullets(s, ["Repetition Count Test: el mismo valor repetido demasiadas veces seguidas",
@@ -346,7 +347,7 @@ panel(s, Inches(0.6), Inches(1.6), Inches(3.9), Inches(4.0), "1 · Física docum
 panel(s, Inches(4.72), Inches(1.6), Inches(3.9), Inches(4.0), "2 · Pruebas NIST",
       ["SP 800-22 sobre la salida", "", "Descartan sesgo, periodicidad, fuente apagada"], CYAN, 16)
 panel(s, Inches(8.84), Inches(1.6), Inches(3.9), Inches(4.0), "3 · Diseño defensivo",
-      ["512 bits para 256 (margen 90C)", "", "SHA-256 como acondicionador", "", "LDR extra, 0 bits acreditados"], AMBER, 16)
+      ["512 bits para 256 (margen 90C)", "", "SHA-256 como acondicionador", "", "Etiqueta de dominio"], AMBER, 16)
 text(s, "El ruido crudo del ESP32 no es accesible: medir entropía sobre la salida es un control de cordura, no una "
         "certificación.", Inches(0.6), Inches(5.9), Inches(12), Inches(0.8), 16, MUTED)
 
@@ -355,8 +356,7 @@ s = new_slide("Con la placa real", P3,
               "envían secretos. Si hay tiempo, correr la captura y la batería NIST en vivo.")
 table(s, [["Comando USB (firmware DEMO)", "Respuesta"],
           ["ES:PING", "ES:PONG 0.1.0 DEMO ESP32-D0WD-V3"],
-          ["ES:RNG 64", "64 bytes distintos en cada pedido"],
-          ["ES:LDR 16 200", "lecturas del ADC en GPIO34"]],
+          ["ES:RNG 64", "64 bytes distintos en cada pedido"]],
       Inches(0.6), Inches(1.6), Inches(12.1), [0.4, 0.6], size=17)
 code = ["python tools/entropy_analysis/capture_esp32.py --port COM4 --rng 1000000 --out esp32_rng.bin",
         "python tools/entropy_analysis/nist_sp800_22.py --file esp32_rng.bin"]
@@ -377,7 +377,7 @@ bullets(s, ["256 bits de entropía + 8 bits de checksum (SHA-256) = 264 bits",
 s = new_slide("Conclusiones", notes="Cierre: repasar las cuatro ideas y abrir a preguntas.")
 bullets(s, ["El RNG del ESP32 es verdadero solo con una fuente de ruido activa: sin WiFi hay que encender el SAR ADC",
             "Leímos el manual y corregimos el ritmo de lectura (5 MHz → 500 kHz)",
-            "SHA-256 concentra la entropía pero no la crea; el LDR no se acredita",
+            "SHA-256 concentra la entropía pero no la crea: por eso pedimos 512 bits para sacar 256",
             "NIST SP 800-22 detecta generadores malos, pero no demuestra que uno sea bueno",
             "La seguridad se apoya en física documentada + pruebas + diseño defensivo"], size=22)
 

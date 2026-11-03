@@ -28,8 +28,8 @@ Las preguntas probables con sus respuestas están en la sección 8.
 
 EntropySigner es un dispositivo **offline** (sin WiFi ni Bluetooth) que genera una wallet de criptomonedas:
 
-1. Junta **entropía física**: 64 bytes del generador aleatorio por hardware (RNG) del ESP32 y 128 lecturas de un sensor de luz (LDR).
-2. Las **acondiciona** con SHA-256 y obtiene 256 bits de entropía.
+1. Junta **entropía física**: 64 bytes (512 bits) del generador aleatorio por hardware (RNG) del ESP32, que es la única fuente.
+2. Los **acondiciona** con SHA-256 y obtiene 256 bits de entropía.
 3. Convierte esos 256 bits en una frase **BIP-39 de 24 palabras**.
 4. Deriva las claves con **PBKDF2 → BIP-32 → BIP-44** y muestra las direcciones de Bitcoin y Ethereum en una pantalla táctil de 320×480.
 
@@ -37,7 +37,7 @@ EntropySigner es un dispositivo **offline** (sin WiFi ni Bluetooth) que genera u
 
 **La seguridad de todo el sistema depende del paso 1.** Si los 256 bits no son impredecibles, todo lo demás —SHA-256, curvas elípticas, BIP-32— no sirve: un atacante que pueda adivinar la entropía puede regenerar la wallet y vaciarla.
 
-**Hardware:** ESP32 DOIT DevKit V1 (chip ESP32-D0WD-V3, doble núcleo Xtensa LX6 a 240 MHz), pantalla ST7796S con touch capacitivo FT6336U, LDR GL5528 en GPIO34.
+**Hardware:** ESP32 DOIT DevKit V1 (chip ESP32-D0WD-V3, doble núcleo Xtensa LX6 a 240 MHz), pantalla ST7796S con touch capacitivo FT6336U. La entropía no necesita ningún componente externo: sale del propio chip.
 
 ---
 
@@ -149,7 +149,7 @@ void fillRandomBytes(uint8_t* out, size_t len) {
 
 Dos restricciones del hardware que respetamos:
 
-1. **Mientras el SAR ADC alimenta al RNG, no se puede usar el ADC para otra cosa.** Por eso el firmware lee el LDR **antes** y el RNG **después** (`src/entropy/entropy_pool.cpp`).
+1. **Mientras el SAR ADC alimenta al RNG, no se puede usar el ADC para otra cosa** (`analogRead()`). El firmware no usa el ADC para nada más.
 2. **Velocidad de lectura** (ver 3.4).
 
 ### 3.4 Lo que encontramos leyendo el manual: la corrección del ritmo de lectura ★★
@@ -177,13 +177,13 @@ Ninguna fuente física da bits perfectamente uniformes e independientes. Por eso
 Nuestro firmware calcula:
 
 ```
-entropía = SHA-256( "EntropySigner/entropy-pool/v1"   (29 bytes, separación de dominio)
-                    || RNG de hardware                  (64 bytes = 512 bits)
-                    || flag de LDR                      (1 byte)
-                    || 128 lecturas del LDR             (256 bytes) )
+entropía = SHA-256( "EntropySigner/entropy-pool/v2"   (29 bytes, separación de dominio)
+                    || RNG de hardware                  (64 bytes = 512 bits) )
 ```
 
-Entrada: **2800 bits**. Salida: **256 bits**.
+Entrada: **744 bits** (de los cuales 512 son del RNG; la etiqueta es fija y pública). Salida: **256 bits**.
+
+La etiqueta (*domain tag*) hace que este uso de SHA-256 no pueda coincidir con ningún otro del sistema (por ejemplo, el checksum de BIP-39).
 
 **¿Por qué 64 bytes del RNG si solo necesitamos 256 bits?** Porque SP 800-90C pide que la entrada tenga al menos **64 bits más** de entropía que la salida (h_in ≥ n_out + 64) para que la salida tenga entropía completa. Con 512 bits hay margen de sobra.
 
@@ -199,9 +199,7 @@ Entrada: **2800 bits**. Salida: **256 bits**.
 
 **Regla clave:** SHA-256 **nunca crea entropía**: h_out ≤ min(h_in, 256). Un hash hace que los datos *parezcan* aleatorios, pero si la entrada es adivinable, la salida también.
 
-**¿Y el LDR?** Le acreditamos **0 bits**. Es una fuente controlable desde afuera (una linterna lo satura), lenta y periódica (parpadeo de 100 Hz por la red eléctrica de 50 Hz). Solo suma **defensa en profundidad**: si el RNG tuviera una falla, el LDR agrega algo de incertidumbre, pero la seguridad no depende de él.
-
-![LDR normal vs ataque](img/ldr.png)
+**Efecto avalancha:** si cambia un solo bit de los 512 del RNG, cambia en promedio la mitad de los 256 bits de salida. Nadie puede "ajustar" la entrada para obtener una salida elegida (se puede probar en `simulator/laboratorio.html`, paso 2).
 
 ---
 
@@ -274,23 +272,23 @@ SP 800-22 mira la salida. SP 800-90B va un paso antes: estima la **min-entropía
 - **Collision (§6.3.2):** cuánto tarda en repetirse un valor.
 - **Lag Prediction (§6.3.8):** 128 predictores intentan adivinar cada muestra mirando las anteriores; detecta periodicidades y deriva.
 
-Resultados con 200.000 muestras (fuentes de referencia y modelo del LDR):
+Resultados con 100.000 muestras (fuentes de referencia y fuentes rotas simuladas):
 
 | Fuente | Bits por muestra | Min-entropía estimada | % del máximo | Health tests |
 |---|---|---|---|---|
-| CSPRNG de referencia | 8 | 7,42 | 93% | ok |
-| LDR con luz ambiente (modelo) | 12 | 3,16 | 26% | ok |
-| **LDR con linterna (ataque)** | 12 | **0,30** | **2,5%** | **FALLA** |
-| SHA-256(contador) | 8 | 7,32 | 92% | ok |
+| CSPRNG de referencia | 8 | 7,43 | 93% | ok |
+| Fuente sesgada (52% de unos) | 8 | 7,35 | 92% | ok |
+| **RNG trabado (repite el byte anterior el 90% de las veces)** | 8 | **0,15** | **2%** | **FALLA** |
+| SHA-256(contador) | 8 | 7,27 | 91% | ok |
 
-Los estimadores son conservadores: aun con datos ideales dan ~93%, no 100%.
+Los estimadores son conservadores: aun con datos ideales dan ~93%, no 100%. Fíjense que la fuente sesgada casi no se distingue acá: ese defecto lo detectan las pruebas de uniformidad de SP 800-22 (frecuencia, rachas).
 
 **Health tests (SP 800-90B §4.4):** son pruebas que corren **dentro del dispositivo**, en cada uso, para detectar una fuente rota o manipulada:
 
 - **Repetition Count Test:** falla si el mismo valor se repite demasiadas veces seguidas.
 - **Adaptive Proportion Test:** falla si un valor aparece demasiado en una ventana de 512 muestras.
 
-El ataque con linterna dispara ambos: es exactamente el caso que deben detectar.
+El RNG trabado los dispara: es exactamente el caso que deben detectar (una fuente de ruido que dejó de funcionar).
 
 ### 5.7 El límite honesto de lo que podemos demostrar ★★
 
@@ -300,7 +298,7 @@ Por eso nuestra argumentación de seguridad tiene **tres pilares**, no uno:
 
 1. **Justificación física y documental:** el fabricante documenta las fuentes de ruido, las tasas de entropía y las condiciones (cap. 18 del TRM), y nuestro firmware cumple esas condiciones (fuente activa, ritmo ≤ 500 kHz).
 2. **Pruebas estadísticas sobre la salida (SP 800-22):** descartan fallas groseras (sesgo, periodicidad, una fuente apagada que se comporte como LCG).
-3. **Diseño defensivo:** 512 bits de entrada para 256 de salida (margen de SP 800-90C), acondicionamiento con SHA-256, LDR como fuente extra no acreditada.
+3. **Diseño defensivo:** 512 bits de entrada para 256 de salida (margen de SP 800-90C), acondicionamiento con SHA-256 y separación de dominio.
 
 Una validación formal requeriría la herramienta oficial del NIST (`ea_non_iid`) sobre ≥ 1.000.000 de muestras **crudas** y la certificación del módulo, algo que está fuera del alcance de un proyecto académico.
 
@@ -316,8 +314,6 @@ Con el firmware DEMO cargado, la ESP32 responde por USB a un protocolo de prueba
 |---|---|
 | `ES:PING` | `ES:PONG 0.1.0 DEMO ESP32-D0WD-V3` |
 | `ES:RNG 64` | 64 bytes distintos en cada pedido |
-| `ES:LDR 16 200` | `405,764,1069,…,4095,…` (pin al aire, sin LDR conectado) |
-
 El simulador web (`simulator/index.html`) usa esos bytes reales para armar la wallet y **se niega a generar si la placa no está conectada**.
 
 ### 6.2 Cómo correr la verificación NIST con la placa
@@ -336,13 +332,6 @@ python tools/entropy_analysis/analyze_entropy.py --file docs/estudio/data/esp32_
 
 # 4. Regenerar figuras: agrega la fila "ESP32 RNG (real)" a la tabla y a las imágenes
 python docs/estudio/generar_figuras.py
-```
-
-Opcional, el LDR una vez conectado:
-
-```bash
-python tools/entropy_analysis/capture_esp32.py --port COM4 --ldr 100000 --out ldr.txt
-python tools/entropy_analysis/analyze_entropy.py --file ldr.txt --bits 12
 ```
 
 ### 6.3 Resultados de la ESP32 (completar después de la captura)
@@ -379,7 +368,7 @@ Todo el pipeline está verificado contra los vectores de prueba oficiales (BIP-3
 Es un generador con estado interno realimentado con ruido físico (ruido térmico del ADC y jitter entre relojes). Es verdadero mientras haya una fuente de ruido activa (WiFi/BT o `bootloader_random_enable()`) y se lea a la tasa correcta. Sin fuente, el fabricante dice que hay que considerarlo pseudoaleatorio.
 
 **Si no usan WiFi, ¿de dónde sale la aleatoriedad?**
-Del SAR ADC, que activamos con `bootloader_random_enable()` justo antes de leer el RNG y apagamos con `bootloader_random_disable()` después, para poder usar el ADC con el LDR.
+Del SAR ADC, que activamos con `bootloader_random_enable()` justo antes de leer el RNG y apagamos con `bootloader_random_disable()` después.
 
 **¿Cómo saben que es aleatorio?**
 No se puede "probar" que una secuencia es aleatoria. Lo justificamos con el diseño físico documentado por Espressif, cumplimos sus condiciones de uso, y corremos las pruebas NIST SP 800-22 para descartar fallas. Mostramos que Mersenne Twister también pasa las pruebas: por eso no basta con ellas.
@@ -391,10 +380,10 @@ La probabilidad de ver un resultado tan extremo si la secuencia fuera aleatoria.
 Con α = 0,01, una fuente perfecta falla el 1% de las veces cada prueba. NIST por eso mira la proporción sobre muchas secuencias y la uniformidad de los P-valores, y recomienda repetir la corrida antes de concluir.
 
 **¿Para qué sirve SHA-256 si el RNG ya es aleatorio?**
-Para acondicionar: concentra la entropía de 2800 bits de entrada (algo sesgada o correlacionada) en 256 bits uniformes, y combina dos fuentes de modo que la salida es impredecible si al menos una lo es. No crea entropía.
+Para acondicionar: concentra los 512 bits del RNG (que pueden tener algo de sesgo o correlación) en 256 bits uniformes, y oculta cualquier estructura de la fuente. No crea entropía.
 
-**¿Por qué el LDR tiene 0 bits acreditados?**
-Porque un atacante lo controla con una linterna (lo demostramos: la min-entropía cae a 0,3 bits y los health tests fallan). Es defensa en profundidad, no la fuente principal.
+**¿Por qué una sola fuente de entropía?**
+Porque es una fuente física documentada por el fabricante (TRM cap. 18), validada por Espressif con Dieharder, y la usamos en sus condiciones (SAR ADC activo, ≤ 500 kHz). Con 512 bits para 256 hay margen aunque entregue menos de lo nominal. Una fuente externa fácil de manipular no sumaría seguridad medible.
 
 **¿Por qué 64 bytes del RNG y no 32?**
 SP 800-90C pide 64 bits de margen sobre la salida para garantizar 256 bits completos. Con 512 bits de entrada el margen sobra.

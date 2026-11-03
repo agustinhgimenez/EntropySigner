@@ -197,36 +197,16 @@ def fig_pipeline():
     ax.set_xlim(0, 12)
     ax.set_ylim(0, 3.4)
     ax.axis("off")
-    box(ax, 0.1, 2.0, 2.3, 1.0, "RNG hardware\n64 bytes = 512 bits", GREEN, 9)
-    box(ax, 0.1, 0.4, 2.3, 1.0, "LDR (GPIO34)\n128 lecturas ADC\n(0 bits acreditados)", AMBER, 9)
-    box(ax, 3.1, 1.0, 2.6, 1.4, "SHA-256(\"EntropySigner/\nentropy-pool/v1\" ||\nRNG || flag || LDR)\n2800 bits de entrada", CYAN, 8.5)
+    box(ax, 0.1, 1.0, 2.3, 1.4, "RNG hardware\n(ruido del SAR ADC)\n64 bytes = 512 bits", GREEN, 9)
+    box(ax, 3.1, 1.0, 2.6, 1.4, "SHA-256(\"EntropySigner/\nentropy-pool/v2\" ||\nRNG)\n744 bits de entrada", CYAN, 8.5)
     box(ax, 6.4, 1.2, 1.6, 1.0, "Entropia\n256 bits", GREEN, 9)
     box(ax, 8.6, 1.2, 1.5, 1.0, "BIP-39\n24 palabras", CYAN, 9)
     box(ax, 10.6, 1.2, 1.3, 1.0, "BIP-32/44\nBTC / ETH", CYAN, 9)
-    arrow(ax, 2.4, 2.5, 3.1, 1.9)
-    arrow(ax, 2.4, 0.9, 3.1, 1.5)
+    arrow(ax, 2.4, 1.7, 3.1, 1.7)
     arrow(ax, 5.7, 1.7, 6.4, 1.7)
     arrow(ax, 8.0, 1.7, 8.6, 1.7)
     arrow(ax, 10.1, 1.7, 10.6, 1.7)
     fig.savefig(IMG / "pipeline.png", dpi=160, facecolor=BG, bbox_inches="tight")
-    plt.close(fig)
-
-
-def fig_ldr():
-    rng = np.random.default_rng(3)
-    t = np.arange(2000) * 210e-6
-    normal = 1800 + 25 * np.sin(2 * np.pi * 100 * t) + rng.normal(0, 2.5, t.size)
-    attack = np.minimum(4095, 4095 + rng.normal(0, 0.35, t.size)).round()
-    fig, ax = plt.subplots(figsize=(10, 3.2), facecolor=BG)
-    style(ax)
-    ax.plot(t * 1000, normal, color=CYAN, lw=0.8, label="luz ambiente (parpadeo 100 Hz + ruido)")
-    ax.plot(t * 1000, attack - 2100, color=RED, lw=0.8, label="linterna encima (ADC saturado, desplazado)")
-    ax.set_xlabel("tiempo [ms]")
-    ax.set_ylabel("lectura ADC")
-    ax.legend(facecolor=BG, labelcolor=FG, fontsize=8, loc="center right")
-    ax.set_title("Por que el LDR no puede ser la fuente principal: es lento, periodico y manipulable", fontsize=10)
-    fig.tight_layout()
-    fig.savefig(IMG / "ldr.png", dpi=150, facecolor=BG)
     plt.close(fig)
 
 
@@ -240,7 +220,6 @@ def main() -> None:
     fig_nist_table(rows)
     fig_rng_hardware()
     fig_pipeline()
-    fig_ldr()
     print("figuras en", IMG)
 
 
