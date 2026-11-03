@@ -68,29 +68,29 @@ Si el tiempo se acorta, recortar 3, 9 y 11 (quedan cubiertos en la defensa).
 
 Explicar en este orden:
 
-1. **Fuente principal = RNG de hardware.** Dato no obvio: según Espressif, sin la
+1. **Única fuente = RNG de hardware.** Dato no obvio: según Espressif, sin la
    radio encendida el RNG es pseudoaleatorio. Como no usamos radio, activamos el
    SAR ADC como fuente de ruido con `bootloader_random_enable()`.
-2. **LDR = 0 bits acreditados.** "Lo usamos, pero no confiamos en él."
+2. **Ritmo del ruido.** El ruido entra a ritmo limitado: esperamos 2 µs entre
+   palabras de 32 bits para no leer más rápido de lo que se genera.
 3. **SHA-256 no crea entropía.** Frase para decir textual: *"Un hash no puede
    sacar de la entrada más imprevisibilidad de la que la entrada tiene."*
-4. **Orden de muestreo.** LDR primero, RNG después: si el atacante pudiera ver el
-   RNG antes de elegir la luz, podría probar variantes y sesgar la salida
-   (*grinding*). Así, no puede.
+4. **Margen.** Pedimos 512 bits para sacar 256 (SP 800-90C pide ≥ 64 bits extra).
 
 ## 6 · SP 800-90B (2:00) — diapositiva clave
 
 - Min-entropía = −log₂ de la probabilidad del valor más probable = "cuánto le
   cuesta al atacante adivinar en el primer intento". Shannon mide el promedio,
   y al atacante no le importa el promedio.
-- LDR: 6.37 bits de Shannon frente a 3.16 de min-entropía. Y no es IID: cada
-  muestra se parece mucho a la anterior (r₁ = 0.98).
-- **Linterna:** cae a 0.30 bits y el health test lo detecta.
+- `stuck` (un RNG trabado que repite el byte anterior): 7.97 bits de Shannon
+  frente a 0.15 de min-entropía, y los health tests lo detectan.
+- `biased` (52 % de unos): los estimadores casi no lo notan; los tests de
+  uniformidad de SP 800-22 sí.
 - **Golpe final:** `sha256-counter` es un contador hasheado: 0 bits reales y
   pasa todas las métricas. *"Los tests estadísticos sólo pueden rechazar una
   fuente, nunca certificarla."*
-- Aclarar que los datos del LDR son **simulados** (todavía no hay muestras de
-  la placa) y que se implementan 3 de los 10 estimadores non-IID.
+- Aclarar que estas fuentes son **simuladas** (la captura real del RNG se hace con
+  `capture_esp32.py`) y que se implementan 3 de los 10 estimadores non-IID.
 
 ## 7 · BIP-39 (1:30)
 
@@ -154,15 +154,14 @@ Explicar en este orden:
 - [ ] Monitor serie abierto (`python -m platformio device monitor`) en una
       ventana visible: muestra los cambios de estado y las direcciones.
 - [ ] Teléfono con un lector QR genérico (cámara), **sin** apps de wallet.
-- [ ] Linterna del teléfono para mostrar el LDR saturándose.
 - [ ] Terminal con el repositorio abierto para el plan B.
 
 ### Pasos
 
 1. **Arranque.** Pantalla de boot con el banner **DEMO MODE**. *"Este banner está
    siempre: una wallet de demo no tiene que confundirse con una real."*
-2. **IDLE.** Pasar la mano sobre el LDR: el valor cambia. Encender la linterna:
-   se satura cerca de 4095. *"Por esto el LDR no cuenta como entropía."*
+2. **IDLE.** Señalar la tarjeta de la fuente de entropía: *"Toda la aleatoriedad
+   sale del RNG de hardware del chip: 64 bytes que se comprimen con SHA-256."*
 3. **GENERAR WALLET.** Mostrar el progreso de los seis pasos.
 4. **Advertencia.** Leerla en voz alta. Tocar **MOSTRAR**.
 5. **24 palabras.** *"En una wallet real, ahora nadie debería estar mirando."*
@@ -183,8 +182,8 @@ python tools/entropy_analysis/analyze_entropy.py --synthetic all
    El valor esperado (`1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA`) está en
    `tests/test_bitcoin/test_main.cpp`; contrastarlo con cualquier wallet pública
    (Trezor, Ledger, MetaMask) que use ese mnemonic de prueba.
-2. `analyze_entropy.py`: mostrar la tabla resumen y comparar `ldr` con
-   `ldr-attack` y `sha256-counter` (diapositiva 6).
+2. `analyze_entropy.py`: mostrar la tabla resumen y comparar `trng` con
+   `stuck` y `sha256-counter` (diapositiva 6).
 3. Abrir `src/ui/wallet_ui.cpp` en `enterState()` para mostrar dónde se borra el mnemonic.
 
 ---
@@ -192,7 +191,7 @@ python tools/entropy_analysis/analyze_entropy.py --synthetic all
 ## Frases para tener a mano
 
 - "SHA-256 acondiciona, no crea entropía."
-- "Al LDR le acreditamos cero bits: si es bueno, suma; si es malo, no resta."
+- "Pedimos el doble de bits de los que necesitamos: el margen absorbe un RNG imperfecto."
 - "Los tests estadísticos sólo pueden rechazar una fuente, nunca certificarla."
 - "El air-gap es una propiedad del firmware, no del hardware."
 - "No es una hardware wallet auditada: es un prototipo para entender cómo se construye una."

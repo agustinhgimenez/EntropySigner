@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1080" width="960" height="1080" role="img" aria-labelledby="t d">
   <title id="t">EntropySigner - System Architecture</title>
-  <desc id="d">Full data flow from LDR and ESP32 hardware RNG through SHA-256 conditioning, BIP-39, PBKDF2, BIP-32 and BIP-44 to Bitcoin and Ethereum addresses shown as QR codes on the display.</desc>
+  <desc id="d">Full data flow from the ESP32 hardware RNG through SHA-256 conditioning, BIP-39, PBKDF2, BIP-32 and BIP-44 to Bitcoin and Ethereum addresses shown as QR codes on the display.</desc>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#00E5FF"/>
@@ -20,21 +20,16 @@
   <rect width="960" height="1080" fill="#0B0F14"/>
   <text x="480" y="48" class="h">ENTROPYSIGNER &#183; ARCHITECTURE</text>
 
-  <!-- Entropy sources -->
-  <rect x="120" y="80" width="240" height="70" rx="10" class="src"/>
-  <text x="240" y="112" class="t">LDR &#8594; ADC1</text>
-  <text x="240" y="134" class="s">physical variability (extra)</text>
+  <!-- Entropy source -->
+  <rect x="330" y="80" width="300" height="70" rx="10" class="src"/>
+  <text x="480" y="112" class="t">ESP32 HW RNG</text>
+  <text x="480" y="134" class="s">SAR ADC noise &#183; 64 bytes = 512 bits</text>
 
-  <rect x="600" y="80" width="240" height="70" rx="10" class="src"/>
-  <text x="720" y="112" class="t">ESP32 HW RNG</text>
-  <text x="720" y="134" class="s">primary crypto source</text>
-
-  <path d="M240,150 V190 H470 V210" class="l"/>
-  <path d="M720,150 V190 H490 V210" class="l"/>
+  <path d="M480,150 V210" class="l"/>
 
   <rect x="330" y="210" width="300" height="70" rx="10" class="box"/>
   <text x="480" y="242" class="t">SHA-256 conditioning</text>
-  <text x="480" y="264" class="s">SHA-256(LDR_DATA || RNG_DATA)</text>
+  <text x="480" y="264" class="s">SHA-256(tag || RNG_DATA)</text>
 
   <path d="M480,280 V310" class="l"/>
   <rect x="330" y="310" width="300" height="60" rx="10" class="sec"/>

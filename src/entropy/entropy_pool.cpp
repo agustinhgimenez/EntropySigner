@@ -12,7 +12,6 @@ namespace {
 static_assert(kEntropySize == crypto::kSha256DigestSize, "entropy size must match the SHA-256 digest");
 
 // Domain separation: this digest cannot collide with SHA-256 used elsewhere.
-// v2: input is the HW RNG only (v1 also hashed an LDR flag and samples).
 constexpr char kDomainTag[] = "EntropySigner/entropy-pool/v2";
 
 // 64 bytes (512 bits) of HW TRNG data guarantees h_in >= n_out + 64 (SP 800-90C)

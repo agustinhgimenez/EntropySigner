@@ -52,7 +52,7 @@ EEPROM ni sistemas de archivos (verificable con
 | Perfil | Capacidades | Tratamiento |
 |---|---|---|
 | **A1 — Remoto** | Red, malware en la PC del usuario | Mitigado por diseño: no existe canal de red (§4) |
-| **A2 — Observador** | Ve la pantalla, controla la luz ambiente, accede a la PC conectada por USB | Mitigado parcialmente (§2, §5) |
+| **A2 — Observador** | Ve la pantalla, accede a la PC conectada por USB | Mitigado parcialmente (§2, §5) |
 | **A3 — Físico oportunista** | Tiene el dispositivo minutos: USB, JTAG, lectura de flash | **No mitigado** en el prototipo (§8) |
 | **A4 — Laboratorio** | Osciloscopio, sondas EM, inyección de fallos, decapado | **Fuera de alcance**; se documentan las contramedidas comerciales (§9) |
 | **A5 — Cadena de suministro** | Reemplaza firmware o hardware antes de la entrega | Fuera de alcance; ver kleptografía (§2.7) |
@@ -83,21 +83,14 @@ el **riesgo residual**.
 | **Mitigación implementada** | `mbedtls_ecp_mul()` con **aleatorización de coordenadas proyectivas** (`src/bip32/bip32.cpp`), contramedida estándar contra DPA/SPA sobre ECC. La aritmética no constante en tiempo (`mbedtls_ecp_muladd()` en CKDpub, Base58, RIPEMD-160 y Keccak propios) solo procesa **datos públicos** (claves públicas, hashes, direcciones). Las operaciones con secretos se ejecutan una sola vez por sesión, lo que limita el número de trazas disponibles para un ataque diferencial. |
 | **Riesgo residual** | **Alto frente a A4.** El DRBG de aleatorización se siembra en forma determinística con el propio escalar (réplica del fallback de mbedTLS 2.x): repetir la derivación produce trazas idénticas, que pueden promediarse. mbedTLS no está certificado contra canales laterales en el ESP32-S3, y los aceleradores SHA/AES del chip tampoco tienen contramedidas documentadas. |
 
-### 2.2 Manipulación del sensor de luz (LDR)
+### 2.2 Lectura del RNG más rápida que su fuente de ruido
 
 | | |
 |---|---|
-| **Vector** | El atacante controla la luz que recibe el LDR: lo satura con una linterna (ADC fijo en 4095), lo cubre (oscuridad, ADC cerca de 0) o lo ilumina con un LED modulado para imponer un patrón conocido. Variante: medir la misma luz ambiente desde afuera para predecir las lecturas. |
-| **Impacto** | Si la entropía dependiera del LDR, el atacante podría reducirla a ~0 bits o elegirla. |
-| **Mitigación implementada** | 1. **Al LDR se le acreditan 0 bits** (política documentada en `ARCHITECTURE.md` §1 y en `entropy_pool.h`). La seguridad descansa en el RNG de hardware. 2. Combinación por **hash**: `SHA-256(tag ‖ RNG ‖ flag ‖ LDR)`. Una entrada controlada no puede reducir la entropía que aporta el RNG (§5.4). 3. **Orden de muestreo**: el LDR se lee **antes** que el RNG (`entropy_pool.cpp`), así que un atacante que controle la luz no puede adaptar su manipulación a la salida del RNG. 4. Análisis estadístico con `tools/entropy_analysis/analyze_entropy.py` (§5.3). |
-| **Riesgo residual** | **Bajo**, siempre que el RNG de hardware sea sano. El firmware **no** ejecuta health tests en línea sobre el LDR (§8); un LDR saturado pasa inadvertido, aunque no afecta la seguridad por la política de crédito cero. |
-
-Resultado de la simulación de ataque (fuente `ldr-attack`, N = 200 000):
-
-| Fuente | H_MCV | H_Lag | H_I (min-entropía) | Repetition Count Test |
-|---|---|---|---|---|
-| LDR normal (simulado) | 5.85 bits | 3.16 bits | **3.16 bits/muestra** | OK |
-| LDR saturado por linterna | 0.85 bits | 0.30 bits | **0.30 bits/muestra** | **FALLA** (racha de 29 > corte 21) |
+| **Vector** | El registro `RNG_DATA_REG` se puede leer a cualquier velocidad, pero el ruido físico entra a un ritmo limitado: con el SAR ADC, 2 bits por ciclo de `RC_FAST_CLK` (TRM §18.3). Leer palabras seguidas sin esperar devuelve valores que dependen sobre todo del estado interno del generador, no de ruido nuevo. Lo mismo pasa si otro código usa el ADC (`analogRead()`) mientras `bootloader_random_enable()` está activo. |
+| **Impacto** | La entrada al acondicionador tendría menos entropía real que los 512 bits nominales. |
+| **Mitigación implementada** | 1. `hw_rng.cpp` espera **2 µs entre palabras de 32 bits**, lo que da tiempo a que entren ≥ 32 bits de ruido del SAR ADC. 2. El firmware no usa el ADC para nada más. 3. Se piden **512 bits para extraer 256**: aunque el RNG aportara solo la mitad, la salida de SHA-256 seguiría teniendo ≈ 255 bits (§5.4). |
+| **Riesgo residual** | **Bajo.** El ruido crudo no es observable, así que la tasa real de entropía por palabra se toma de la documentación del fabricante. |
 
 ### 2.3 Generador pseudoaleatorio predecible
 
@@ -105,7 +98,7 @@ Resultado de la simulación de ataque (fuente `ldr-attack`, N = 200 000):
 |---|---|
 | **Vector** | 1. `esp_random()` sin fuente física de ruido: con la radio apagada y sin SAR ADC, el RNG del ESP32-S3 **es solo pseudoaleatorio** (documentación de ESP-IDF). 2. Uso accidental de `rand()`/`random()` de la libc o de Arduino. 3. Semilla fija o reutilizada entre arranques. 4. Debilitamiento intencional del RNG (kleptografía, §2.7). |
 | **Impacto** | Catastrófico: un mnemonic predecible permite a terceros reconstruir la wallet, como ocurrió con los incidentes históricos de wallets con RNG débil (Android `SecureRandom` 2013, "Milk Sad"/Libbitcoin Explorer 2023, con espacio de semillas de 32 bits). |
-| **Mitigación implementada** | `hw_rng.cpp` envuelve cada lectura con `bootloader_random_enable()` / `bootloader_random_disable()`, que activa el SAR ADC como fuente de ruido físico aunque no haya radio. Solo se usa `esp_fill_random()`; no hay llamadas a `rand()` en el código criptográfico. La salida se acondiciona con SHA-256 junto con el LDR y un *domain tag*. Cada wallet se genera con entropía fresca: no hay estado de RNG persistente. |
+| **Mitigación implementada** | `hw_rng.cpp` envuelve cada lectura con `bootloader_random_enable()` / `bootloader_random_disable()`, que activa el SAR ADC como fuente de ruido físico aunque no haya radio. Solo se usa `esp_random()`; no hay llamadas a `rand()` en el código criptográfico. La salida se acondiciona con SHA-256 y un *domain tag*. Cada wallet se genera con entropía fresca: no hay estado de RNG persistente. |
 | **Riesgo residual** | **Medio.** El ruido del RNG no es observable antes del post-procesamiento del chip, así que no puede evaluarse según SP 800-90B (§5.3, punto 4). No hay health tests en el firmware que detecten una falla del RNG en campo. |
 
 ### 2.4 Volcado de memoria flash / RAM
@@ -151,7 +144,7 @@ dispositivo (§9).
 |---|---|---|---|---|---|
 | Exfiltración por red | ✔ | ✔ | — | — | Eliminada (sin radio) |
 | Fuga por logs serie | — | ✔ | ✔ | — | Mitigada (PRODUCTION sin logs de debug, sin secretos en ningún modo) |
-| Manipulación del LDR | — | ✔ | ✔ | ✔ | Mitigada (crédito 0 + hash) |
+| RNG leído más rápido que su ruido | — | — | — | ✔ | Mitigada (2 µs entre palabras + 512 bits para 256) |
 | RNG predecible | ✔ | — | — | ✔ | Mitigada parcialmente (SAR ADC, sin health tests) |
 | Volcado de flash | — | — | ✔ | ✔ | Sin impacto en secretos; firmware reemplazable |
 | Volcado de RAM en vivo | — | — | ✘ | ✘ | **No mitigada** (JTAG abierto) |
@@ -236,7 +229,6 @@ que el módulo sea C++ puro y testeable en el host (`tests/test_crypto`).
 | Pantalla TFT | Salida | Estado de la UI, mnemonic (solo en backup), direcciones | Único canal que muestra secretos, siempre a pedido explícito |
 | Códigos QR | Salida | **Solo direcciones públicas** BTC/ETH | `qr::renderQr()` recibe únicamente `g_session.btc_address` / `eth_address` |
 | Pantalla táctil | Entrada | Navegación | Sin entrada de datos arbitrarios |
-| LDR (ADC) | Entrada | Luz ambiente | Entrada no confiable, crédito de entropía 0 |
 | USB-UART | Bidireccional | Logs de estado y flasheo | Sin secretos; DEBUG compilado fuera en PRODUCTION |
 
 ### 4.2 Cómo se garantiza la ausencia de radio
@@ -276,28 +268,25 @@ reactivar). `CORE_DEBUG_LEVEL=0` silencia además los logs del core de Arduino.
 ### 5.1 Construcción
 
 ```
-entropy (256 bits) = SHA-256( "EntropySigner/entropy-pool/v1"   29 B  domain tag
-                            ‖ RNG_HW                             64 B  esp_fill_random + SAR ADC
-                            ‖ include_ldr                         1 B  0x00 / 0x01
-                            ‖ LDR[0..127]                       256 B  uint16 little-endian )
-n_in = 2800 bits  →  n_out = 256 bits
+entropy (256 bits) = SHA-256( "EntropySigner/entropy-pool/v2"   29 B  domain tag
+                            ‖ RNG_HW                             64 B  esp_random + SAR ADC )
+n_in = 744 bits  →  n_out = 256 bits
 ```
 
 | Decisión | Justificación |
 |---|---|
 | **Domain tag** | Separación de dominios: esta invocación de SHA-256 no puede coincidir con otro uso de SHA-256 en el sistema (checksum BIP-39, Base58Check). |
-| **Campos de longitud fija + flag** | Codificación sin ambigüedad: dos combinaciones distintas de (RNG, LDR, modo) no pueden producir la misma cadena de entrada. |
-| **LDR antes que RNG** | Requisito de hardware (el SAR ADC no puede servir al RNG y al driver ADC a la vez) y además de seguridad: la entrada controlable se fija antes de que exista la salida del RNG (§5.4). |
+| **64 bytes de RNG** | Se piden 512 bits para extraer 256: NIST SP 800-90C pide que la entrada tenga al menos 64 bits de entropía más que la salida (§5.4). |
 | **SHA-256** | Función hash aprobada (FIPS 180-4) y componente de acondicionamiento aprobado según SP 800-90B §3.1.5.1.1. Está acelerada por hardware en el ESP32-S3 vía mbedTLS. |
 
-### 5.2 Fuentes
+### 5.2 Fuente
 
-- **RNG de hardware (fuente principal).** Según la documentación de ESP-IDF,
-  el RNG del ESP32-S3 entrega números verdaderamente aleatorios solo si mezcla
+- **RNG de hardware (única fuente).** Según la documentación de ESP-IDF,
+  el RNG del ESP32 entrega números verdaderamente aleatorios solo si mezcla
   ruido físico: el subsistema RF o el SAR ADC habilitado con
-  `bootloader_random_enable()`. El firmware usa la segunda opción.
-- **LDR (fuente complementaria).** Divisor resistivo leído por ADC1 a 12 bits.
-  No se le acredita entropía (§5.3).
+  `bootloader_random_enable()`. El firmware usa la segunda opción. El TRM
+  (cap. 18) describe dos fuentes de ruido combinadas por XOR: el ruido térmico
+  del SAR ADC y la diferencia entre `RC_FAST_CLK` (8 MHz) y el reloj APB (80 MHz).
 
 ### 5.3 Evaluación según NIST SP 800-90B
 
@@ -310,17 +299,18 @@ tests §4.4 (Repetition Count y Adaptive Proportion).
 
 ```
 python tools/entropy_analysis/analyze_entropy.py --synthetic all
-python tools/entropy_analysis/analyze_entropy.py --file captura_ldr.txt --bits 12
+python tools/entropy_analysis/capture_esp32.py --port COM4 --rng 1000000 --out rng.bin
+python tools/entropy_analysis/analyze_entropy.py --file rng.bin --format u8
 ```
 
-Resultados sobre las fuentes simuladas (N = 200 000, semilla 2026):
+Resultados sobre las fuentes simuladas (N = 100 000, semilla 2026):
 
-| Fuente | bits | H_MCV | H_Lag | H_I | H_I/bit | Shannon | Lags significativos |
-|---|---|---|---|---|---|---|---|
-| `trng` (os.urandom) | 8 | 7.75 | 7.90 | 7.29 | 0.91 | 8.00 | 0 |
-| `ldr` | 12 | 5.85 | 3.16 | 3.16 | 0.26 | 6.37 | 10/10 (r₁ = 0.98) |
-| `ldr-attack` | 12 | 0.85 | 0.30 | 0.30 | 0.02 | 1.73 | 10/10 |
-| `sha256-counter` | 8 | 7.72 | 7.94 | 7.32 | 0.92 | 8.00 | 0 |
+| Fuente | bits | H_MCV | H_Lag | H_I | H_I/bit | Shannon | Lags significativos | Health tests |
+|---|---|---|---|---|---|---|---|---|
+| `trng` (os.urandom) | 8 | 7.66 | 7.75 | 7.43 | 0.93 | 8.00 | 0 | ok |
+| `biased` (52 % de unos) | 8 | 7.35 | 7.75 | 7.35 | 0.92 | 7.99 | 0 | ok |
+| `stuck` (RNG trabado) | 8 | 7.26 | 0.15 | 0.15 | 0.02 | 7.97 | 10/10 | **FALLA** |
+| `sha256-counter` | 8 | 7.62 | 7.94 | 7.27 | 0.91 | 8.00 | 0 | ok |
 
 Las fuentes simuladas son reproducibles con `--seed`, salvo `trng`, que usa el
 CSPRNG del sistema operativo y varía en ±0.1 bits entre ejecuciones. El
@@ -331,15 +321,14 @@ Conclusiones:
 
 1. **La métrica relevante es la min-entropía**, H∞ = −log₂ p_max, porque acota
    la probabilidad de acertar el secreto en el primer intento. La entropía de
-   Shannon la sobrestima: en el LDR, 6.37 bits frente a 3.16 bits.
-2. **El LDR no es IID.** Su autocorrelación de lag 1 es 0.98 (deriva lenta y
-   parpadeo de 100 Hz de la red de 50 Hz). El estimador MCV, que ignora el
-   orden, sobrestima en un 85 % lo que mide el predictor Lag. SP 800-90B obliga
-   a usar la vía non-IID para fuentes así.
-3. **El LDR es controlable por el atacante** (§2.2) y no existe un modelo
-   estocástico validado del sensor, como exige SP 800-90B §3.2.2 para acreditar
-   entropía. Lo poco que varía es sobre todo ruido térmico y de cuantización
-   del ADC, no información sobre la luz. **Por eso se le acreditan 0 bits.**
+   Shannon la sobrestima: en `stuck`, 7.97 bits frente a 0.15 bits.
+2. **Una fuente con memoria no es IID.** En `stuck` cada byte repite el
+   anterior el 90 % de las veces: el estimador MCV, que ignora el orden, ve
+   7.26 bits, mientras que el predictor Lag baja a 0.15. SP 800-90B obliga a
+   usar la vía non-IID para fuentes así, y los health tests la detectan.
+3. **Un sesgo pequeño casi no se nota en la min-entropía.** `biased` pierde
+   solo ~0.1 bits/byte; lo detectan los tests de uniformidad de SP 800-22
+   (`nist_sp800_22.py`), no los estimadores.
 4. **Los tests estadísticos no prueban aleatoriedad.** `sha256-counter` es
    indistinguible de `trng` en todas las métricas y tiene entropía nula. Por la
    misma razón, analizar la salida ya post-procesada de `esp_random()` solo
@@ -371,22 +360,12 @@ Valores teóricos para el acondicionamiento (con n_out = nw = 256):
 
 | Escenario | h_in (bits) | h_out (bits) | Estado en EntropySigner |
 |---|---|---|---|
-| RNG HW a 32 bytes (256 bits nom.), LDR acreditado en 0 | 256 | 255.0 | Versión previa (pérdida fraccionaria teórica) |
-| **RNG HW a 64 bytes (512 bits)**, LDR acreditado en 0 | **≥ 320** | **256.0** | **Implementación actual:** cumple criterio SP 800-90C ($h_{in} \ge n_{out} + 64$) |
+| RNG HW a 32 bytes (256 bits nominales) | 256 | 255.0 | Pérdida fraccionaria teórica: por eso no se usa |
+| **RNG HW a 64 bytes (512 bits)** | **≥ 320** | **256.0** | **Implementación actual:** cumple el criterio SP 800-90C ($h_{in} \ge n_{out} + 64$) |
 | RNG degradado a 128 bits | 128 | 128.0 | Tolerancia a fallos parciales |
-| RNG comprometido, LDR medido sin atacante | 403.9 | 256.0 | Escenario optimista (**no acreditado por política**) |
-| RNG comprometido y LDR saturado | 0 | 0.0 | Falla total de fuentes físicas |
+| RNG roto (salida constante) | 0 | 0.0 | Falla total de la fuente |
 
-Al muestrear `kHwRngBytes = 64` (512 bits) del TRNG por hardware del ESP32-S3, la entrada aporta sobradamente más de los 320 bits de min-entropía requeridos por la recomendación NIST SP 800-90C para garantizar que el valor resultante del digest SHA-256 alcance **256.0 bits completos de min-entropía** sin déficit fraccionario. Además, `initLdr()` reestablece la atenuación del ADC en cada ciclo de muestreo para prevenir cualquier descalibración originada tras el ciclo del SAR ADC del TRNG.
-
-**Combinación de fuentes.** Si X (RNG) es impredecible e independiente de Y
-(LDR), modelando SHA-256 como oráculo aleatorio, la salida es casi uniforme
-para *cualquier* valor de Y, incluso uno elegido por el atacante: H∞(X, Y) ≥ H∞(X)
-y la entropía de X no se pierde por concatenar Y. El supuesto crítico es la
-**independencia**: un atacante que viera la salida del RNG y luego eligiera el
-LDR podría hacer *grinding*, es decir, probar 2^t configuraciones y sesgar t
-bits de la salida. El firmware lo impide por diseño, porque el LDR se muestrea
-**antes** de leer el RNG.
+Al muestrear `kHwRngBytes = 64` (512 bits) del RNG por hardware del ESP32, la entrada aporta sobradamente más de los 320 bits de min-entropía requeridos por la recomendación NIST SP 800-90C para que el digest SHA-256 alcance **256.0 bits completos de min-entropía** sin déficit fraccionario.
 
 **Fundamento teórico.** El *Leftover Hash Lemma* garantiza la extracción para
 familias de hash universales con semilla. Para una función fija como SHA-256,
@@ -448,13 +427,13 @@ permutación, padding FIPS 202 `0x06`). Resultado actual: **172 checks PASS,
 |---|---|---|
 | L1 | **Sin Secure Element.** Los secretos se procesan en la SRAM del microcontrolador de propósito general | Expuestos a JTAG, canales laterales y fallos |
 | L2 | **Sin Secure Boot ni flash encryption.** eFuses sin quemar, JTAG y modo download habilitados | Cualquiera con acceso USB puede reemplazar el firmware (incluso por uno kleptográfico) |
-| L3 | **Sin health tests en línea** (SP 800-90B §4.4) sobre el RNG ni el LDR | Una fuente fallada no se detecta en campo; los tests existen solo en la herramienta de análisis |
+| L3 | **Sin health tests en línea** (SP 800-90B §4.4) sobre el RNG | Una fuente fallada no se detecta en campo; los tests existen solo en la herramienta de análisis |
 | L4 | **Ruido crudo del RNG inaccesible** | No es posible una evaluación SP 800-90B del RNG principal; se confía en el fabricante |
 | L5 | **Blinding ECC determinístico** (DRBG sembrado con el escalar) | Trazas repetibles por clave (§2.1) |
 | L6 | **Sin PIN ni autenticación del usuario** | Quien tenga el dispositivo encendido opera la UI |
 | L7 | **Sin detección de manipulación física** (anti-tamper) | Apertura y sondeo sin rastro |
 | L8 | **Sin redundancia frente a fallos** (doble cálculo, verificación del flujo de control) | Vulnerable a glitching |
-| L9 | **Análisis del LDR sobre datos simulados** hasta capturar muestras reales | Las cifras de §5.3 ilustran el método, no caracterizan el hardware |
+| L9 | **Análisis de entropía sobre datos simulados** hasta capturar el RNG real de la placa | Las cifras de §5.3 ilustran el método, no caracterizan el hardware |
 | L10 | **Implementaciones propias** de RIPEMD-160, Keccak-256 y Base58 | Solo procesan datos públicos (mitiga canales laterales); su corrección se respalda con vectores y verificación cruzada, no con auditoría |
 | L11 | **Sin firma de transacciones** | Limita la funcionalidad, pero también elimina la superficie de ataques sobre firmas |
 

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" width="1000" height="640" role="img" aria-labelledby="t d">
   <title id="t">EntropySigner - Wiring diagram</title>
-  <desc id="d">ESP32-S3-DevKitC-1 connected to an ST7796S SPI display, an FT6336U I2C capacitive touch controller and an LDR voltage divider on GPIO1.</desc>
+  <desc id="d">ESP32-S3-DevKitC-1 connected to an ST7796S SPI display, and an FT6336U I2C capacitive touch controller. Entropy comes from the internal hardware RNG.</desc>
   <defs>
     <style>
       .b{fill:#0F1620;stroke-width:2}
@@ -34,9 +34,6 @@
     <text x="610" y="440" class="pr">GPIO16 SCL</text>
     <text x="610" y="470" class="pr">GPIO17 INT</text>
     <text x="610" y="500" class="pr">GPIO18 RST</text>
-    <text x="390" y="200" class="p">3V3</text>
-    <text x="390" y="260" class="p">GPIO1 ADC1_CH0</text>
-    <text x="390" y="320" class="p">GND</text>
     <text x="390" y="520" class="p">USB-C (5V)</text>
   </g>
 
@@ -80,23 +77,13 @@
     <path d="M620,496 H730 V518 H760"/>
   </g>
 
-  <!-- LDR divider -->
-  <rect x="40" y="140" width="250" height="300" rx="12" class="b" stroke="#FFC857"/>
-  <text x="165" y="170" class="t">LDR DIVIDER</text>
-  <text x="165" y="190" class="s">GL5528 + 10 k&#937;</text>
-  <path d="M380,196 H165 V220" class="pwr"/>
-  <rect x="150" y="220" width="30" height="60" rx="4" fill="none" stroke="#FFC857" stroke-width="2"/>
-  <text x="200" y="255" class="p">LDR</text>
-  <path d="M110,215 L140,235 M110,235 L140,255" stroke="#FFC857" stroke-width="2"/>
-  <path d="M134,229 L140,235 L132,237 M134,249 L140,255 L132,257" stroke="#FFC857" stroke-width="2" fill="none"/>
-  <path d="M165,280 V300" class="adc"/>
-  <circle cx="165" cy="300" r="4" fill="#FFC857"/>
-  <path d="M165,300 H270 V256 H380" class="adc"/>
-  <path d="M165,300 V320" class="gnd"/>
-  <rect x="150" y="320" width="30" height="60" rx="4" fill="none" stroke="#C9D1D9" stroke-width="2"/>
-  <text x="200" y="355" class="p">10 k&#937;</text>
-  <path d="M165,380 V410 H330 V316 H380" class="gnd"/>
-  <path d="M150,410 H180 M155,416 H175 M160,422 H170" class="gnd"/>
+  <!-- Entropy: internal, no wiring -->
+  <rect x="40" y="140" width="250" height="160" rx="12" class="b" stroke="#FFC857"/>
+  <text x="165" y="170" class="t">ENTROPY</text>
+  <text x="165" y="196" class="s">internal hardware RNG</text>
+  <text x="165" y="216" class="s">SAR ADC thermal noise</text>
+  <text x="165" y="236" class="s">+ clock jitter</text>
+  <text x="165" y="270" class="s">no external parts</text>
 
   <!-- Power -->
   <path d="M380,516 H300 V580" class="pwr"/>
@@ -106,9 +93,7 @@
   <g transform="translate(40 470)">
     <path d="M0,6 H30" class="spi"/><text x="40" y="10" class="p">SPI display</text>
     <path d="M0,28 H30" class="i2c"/><text x="40" y="32" class="p">I&#178;C touch</text>
-    <path d="M0,50 H30" class="adc"/><text x="40" y="54" class="p">ADC (LDR)</text>
-    <path d="M0,72 H30" class="pwr"/><text x="40" y="76" class="p">3V3 / 5V</text>
-    <path d="M0,94 H30" class="gnd"/><text x="40" y="98" class="p">GND</text>
+    <path d="M0,50 H30" class="pwr"/><text x="40" y="54" class="p">3V3 / 5V</text>
   </g>
   <text x="980" y="625" class="s" style="text-anchor:end">Display and touch VCC/GND to 3V3/GND (check module datasheet). Pins configurable in board_config.h.</text>
 </svg>

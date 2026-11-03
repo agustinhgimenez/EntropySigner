@@ -64,7 +64,7 @@ dispositivo que nunca se conecta a la red?
 | MCU | ESP32-S3 (2 núcleos, 240 MHz, aceleradores SHA/AES) |
 | Display | IPS 320×480 ST7796S (SPI 40 MHz) |
 | Touch | Capacitivo FT6336U (I²C) |
-| Entropía física | LDR GL5528 + 10 kΩ → ADC1 |
+| Entropía | RNG de hardware interno del ESP32 (sin componentes externos) |
 
 - **Sin WiFi ni Bluetooth**: la radio nunca se inicializa.
 - Pines validados en **tiempo de compilación** (`static_assert`): sin strapping, USB ni flash.
@@ -83,7 +83,7 @@ dispositivo que nunca se conecta a la red?
 ├───────────────────────────────────────────────────────────┤
 │ crypto/ SHA-256 · RIPEMD-160 · Keccak-256 · Base58Check    │
 ├───────────────────────────────────────────────────────────┤
-│ entropy/ ldr_entropy · hw_rng · entropy_pool               │
+│ entropy/ hw_rng · entropy_pool                             │
 ├───────────────────────────────────────────────────────────┤
 │ Arduino-ESP32 2.0.17 · ESP-IDF 4.4 · mbedTLS 2.28          │
 └───────────────────────────────────────────────────────────┘
@@ -97,34 +97,31 @@ dispositivo que nunca se conecta a la red?
 ## 5. Entropía: el principio central
 
 ```
-LDR ──► ADC (128 muestras) ─┐
-                            ├──► SHA-256(tag ‖ RNG ‖ flag ‖ LDR) ──► 256 bits
-ESP32 HW RNG (64 B) ────────┘     (SAR ADC como fuente de ruido)
+ESP32 HW RNG (64 B = 512 bits) ──► SHA-256(tag ‖ RNG) ──► 256 bits
+   (ruido térmico del SAR ADC + jitter entre dos relojes)
 ```
 
-- **Fuente principal: RNG de hardware.** Sin radio, el RNG del ESP32-S3 es sólo
+- **Única fuente: el RNG de hardware.** Sin radio, el RNG del ESP32 es sólo
   pseudoaleatorio → se activa el **SAR ADC** con `bootloader_random_enable()`.
-- **LDR: fuente adicional con crédito de 0 bits.** Defensa en profundidad.
+- **2 µs entre palabras de 32 bits:** el ruido entra a ritmo limitado (TRM §18.3).
+- **512 bits para sacar 256:** margen de SP 800-90C (≥ 64 bits extra).
 - **SHA-256 no crea entropía:** H∞(SHA-256(X)) ≤ min(256, H∞(X)).
-- **Orden:** el LDR se lee **antes** que el RNG → un atacante que controla la luz
-  no puede adaptarla a la salida del RNG.
 
 ---
 
-## 6. ¿Cuánta entropía tiene el LDR? (NIST SP 800-90B)
+## 6. ¿Cómo se ve una fuente rota? (NIST SP 800-90B)
 
-Estimadores 6.3.1 MCV · 6.3.2 Collision · 6.3.8 Lag Prediction (N = 200 000)
+Estimadores 6.3.1 MCV · 6.3.2 Collision · 6.3.8 Lag Prediction (N = 100 000)
 
 | Fuente | H_I (min-entropía) | Comentario |
 |---|---|---|
-| `trng` (referencia) | 7.29 bits/byte | |
-| `ldr` | 3.16 bits/muestra | **No IID**: autocorrelación r₁ = 0.98 |
-| `ldr-attack` (linterna) | **0.30** bits/muestra | Repetition Count Test **FALLA** |
-| `sha256-counter` | 7.32 bits/byte | **0 bits reales** |
+| `trng` (referencia) | 7.43 bits/byte | |
+| `biased` (52 % de unos) | 7.35 bits/byte | Lo detectan los tests de uniformidad (SP 800-22) |
+| `stuck` (RNG trabado) | **0.15** bits/byte | Health tests **FALLAN** |
+| `sha256-counter` | 7.27 bits/byte | **0 bits reales** |
 
-- Shannon (6.37) sobrestima: la métrica correcta es la **min-entropía**.
+- Shannon (7.97 en `stuck`) sobrestima: la métrica correcta es la **min-entropía**.
 - **Los tests estadísticos no prueban aleatoriedad**: un contador hasheado los pasa todos.
-- Conclusión: el LDR es manipulable → **crédito 0**, confirmado con datos.
 
 ---
 
@@ -193,7 +190,7 @@ BOOT ─► IDLE ─[GENERAR]─► GENERATING ─► BACKUP_WARNING ─[MOSTRAR
          └──[VOLVER]──── ERROR          [TERMINAR] ◄── SHOW_BTC ◄──► SHOW_ETH
 ```
 
-- IDLE muestra la lectura del LDR en vivo ("pasá la mano sobre el sensor").
+- IDLE describe la fuente de entropía: RNG de hardware, 64 bytes → SHA-256.
 - **Advertencia obligatoria** antes de mostrar las 24 palabras.
 - El mnemonic se **borra de la RAM** al salir de su pantalla.
 - El QR transporta **sólo direcciones públicas**; nada se guarda en flash.
@@ -241,7 +238,6 @@ Referencia: `abandon … about` → `1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA` /
 |---|---|
 | Exfiltración por red | **Eliminada** (sin radio) |
 | Fuga por logs serie | Mitigada (sin secretos; PRODUCTION sin debug) |
-| Manipulación del LDR | Mitigada (crédito 0 + hash + orden de muestreo) |
 | RNG predecible | Parcial (SAR ADC activado; sin health tests en línea) |
 | Volcado de flash | Sin secretos en flash; pero el firmware es reemplazable |
 | Volcado de RAM / JTAG | **No mitigada** |
@@ -256,7 +252,7 @@ Referencia: `abandon … about` → `1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA` /
 - Sin **Secure Element**, sin **Secure Boot** ni flash encryption: con USB se reemplaza el firmware.
 - Sin PIN, sin recuperación desde mnemonic, sin firma de transacciones.
 - El ruido crudo del RNG del ESP32-S3 **no es accesible** → no se puede evaluar formalmente.
-- El análisis del LDR usa datos **simulados** hasta capturar muestras reales.
+- El análisis de entropía usa datos **simulados** hasta capturar el RNG real de la placa.
 
 ### Qué haría un producto comercial
 
@@ -270,8 +266,8 @@ PIN con borrado · entropía del usuario (dados) · builds reproducibles.
 
 1. La seguridad de una wallet se decide en **la generación de la entropía**; el resto es
    matemática determinística y verificable.
-2. **Medir antes de acreditar:** el LDR parece aleatorio (Shannon 6.37) pero un atacante
-   lo reduce a 0.30 bits. Por eso no se le acredita entropía.
+2. **Medir antes de acreditar:** una fuente trabada todavía parece aleatoria con Shannon
+   (7.97 bits) pero su min-entropía real es 0.15 bits; los health tests la detectan.
 3. **Los tests estadísticos no prueban aleatoriedad**; sólo el diseño de la fuente lo hace.
 4. La **verificación independiente** encuentra errores que los tests solos no ven.
 5. Un prototipo honesto documenta sus límites: el camino a producto es hardware seguro.

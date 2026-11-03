@@ -5,19 +5,19 @@
 
 ---
 
-### P1: ¿Por qué no confiar en el LDR como fuente principal de entropía?
-**R:** Un fotorresistor (LDR) mide la luz ambiental incidente, que es un proceso físico macroscópico, lento y predecible. Bajo luz diurna o artificial, la señal está dominada por componentes de baja frecuencia (incluyendo el rizado de 100 Hz de la red de 50 Hz). Además:
-1. Es **manipulable externamente**: un atacante con una linterna o cubriendo el sensor satura el ADC a 4095 o 0, reduciendo la entropía a casi cero (demostrado en `tools/entropy_analysis/analyze_entropy.py --synthetic ldr-attack`).
-2. No cumple el requisito de la norma **NIST SP 800-90B (§3.2.2)** de contar con un modelo estocástico riguroso del fenómeno físico.
-3. Las muestras están altamente correlacionadas ($\text{autocorrelación} > 0.98$).
-Por ello, el firmware le asigna **crédito de entropía 0**. Toda la seguridad descansa en el **TRNG de hardware del ESP32-S3**; el LDR sólo agrega variabilidad complementaria que no puede degradar un RNG sano.
+### P1: ¿Por qué alcanza con una sola fuente de entropía, el RNG del ESP32?
+**R:** Porque es una fuente física documentada por el fabricante y la usamos en las condiciones que Espressif exige para que sea verdaderamente aleatoria:
+1. El TRM (cap. 18) describe dos fuentes de ruido combinadas por XOR: el **ruido térmico del SAR ADC** y la diferencia de fase entre dos relojes independientes (`RC_FAST_CLK` de 8 MHz y APB de 80 MHz). Espressif lo validó con la batería **Dieharder** sobre 2 GB.
+2. Lo leemos con `bootloader_random_enable()` activo (sin radio, es la única forma de que sea TRNG) y esperamos **2 µs entre palabras** para que cada una incorpore ruido nuevo.
+3. Pedimos **512 bits para sacar 256**: aunque el RNG entregara sólo la mitad de la entropía nominal, la salida de SHA-256 seguiría teniendo ≈ 255 bits (SP 800-90B §3.1.5.1.2).
+Agregar fuentes externas fáciles de manipular (un sensor de luz, por ejemplo) no suma seguridad medible y agrega superficie de ataque y cableado.
 
 ---
 
 ### P2: ¿Por qué SHA-256 no puede "crear" entropía?
 **R:** Por el principio de conservación de la información y la desigualdad fundamental de Rényi/Shannon: la entropía de la salida de una función determinística está acotada superiormente por la entropía de la entrada:
 $$H_{\min}(\text{salida}) \le \min(256, H_{\min}(\text{entrada}))$$
-SHA-256 actúa como un **acondicionador/extractor de entropía aprobado por NIST SP 800-90B (§3.1.5.1)**: comprime 2800 bits de entrada con correlación y sesgo en un bloque uniforme e impredecible de 256 bits, destruyendo dependencias estadísticas, pero si la entrada carece de entropía real (ej. un contador predecible), la salida es matemáticamente determinística.
+SHA-256 actúa como un **acondicionador/extractor de entropía aprobado por NIST SP 800-90B (§3.1.5.1)**: comprime 744 bits de entrada (512 del RNG + un tag fijo) con posible sesgo en un bloque uniforme e impredecible de 256 bits, destruyendo dependencias estadísticas, pero si la entrada carece de entropía real (ej. un contador predecible), la salida es matemáticamente determinística.
 
 ---
 
@@ -46,10 +46,10 @@ En `src/security/secure_mem.h`, implementamos `secureMemzero` con dos defensas:
 Para asegurar que este muestreo esté encendido, en `src/entropy/hw_rng.cpp` envolvemos cada lectura con:
 ```cpp
 bootloader_random_enable();
-esp_fill_random(out, len);
+// por cada palabra de 32 bits: delayMicroseconds(2); esp_random();
 bootloader_random_disable();
 ```
-Y como el SAR ADC se comparte, en `src/entropy/entropy_pool.cpp` secuenciamos estrictamente: primero se leen las muestras del LDR con el ADC libre, y luego se activa el RNG de hardware, evitando cualquier contienda de periféricos.
+Mientras esa fuente está activa el ADC no puede usarse para otra cosa (`analogRead()`); el firmware no usa el ADC para nada más, así que no hay contienda de periféricos.
 
 ---
 

@@ -13,17 +13,12 @@ semilla, deriva claves y muestra **sólo información pública** (direcciones y 
 Los secretos nunca salen del dispositivo.
 
 ```
-                 LDR
-                  │
-                  ▼
-                 ADC
-                  │
-                  ├──────────────┐
-                  │              │
-                  ▼              ▼
-             LDR DATA       ESP32 RNG
-                  │              │
-                  └──────┬───────┘
+          ESP32 RNG de hardware
+     (ruido térmico del SAR ADC + jitter de relojes)
+                         │
+                         ▼
+                 64 bytes = 512 bits
+                         │
                          ▼
                SHA-256 (conditioning)
                          │
@@ -59,15 +54,14 @@ Los secretos nunca salen del dispositivo.
 
 ### Principio de seguridad fundamental
 
-- La **fuente criptográfica principal** es el **RNG de hardware del ESP32**.
-- El **LDR** es una fuente física **adicional** de variabilidad. **No** se afirma que aporte 256 bits.
+- La **única fuente de entropía** es el **RNG de hardware del ESP32**, leído con
+  `bootloader_random_enable()` activo para que mezcle ruido físico real.
 - **SHA-256 no crea entropía.** Un hash acondiciona los datos (mezcla, uniformiza,
   oculta estructura), pero la entropía de la salida está acotada por la entropía
-  real de la entrada: \(H_{out} \le \min(256,\ H_{LDR} + H_{RNG})\).
-- Combinar con hash tiene una propiedad útil: si **una** de las fuentes es buena
-  y la otra es mala (pero no controlada adversarialmente con conocimiento de la
-  otra), la salida sigue siendo impredecible. El LDR nunca puede *empeorar* un
-  RNG bueno; en el mejor caso agrega defensa en profundidad.
+  real de la entrada: \(H_{out} \le \min(256,\ H_{RNG})\).
+- Por eso se piden **512 bits** al RNG para extraer 256: el margen cubre un RNG
+  que entregue menos entropía que la nominal (NIST SP 800-90C pide al menos
+  64 bits de margen).
 
 ---
 
@@ -108,7 +102,7 @@ Versiones fijadas en `platformio.ini` (Paso 1):
 │  crypto/   SHA-256, HMAC-SHA512, PBKDF2, RIPEMD-160, Keccak  │
 │            (bibliotecas confiables: mbedTLS, etc.)           │
 ├──────────────────────────────────────────────────────────────┤
-│  entropy/  ldr_source · hw_rng · entropy_pool (conditioning) │
+│  entropy/  hw_rng · entropy_pool (conditioning)              │
 ├──────────────────────────────────────────────────────────────┤
 │  hal/config  board_config.h (pines), drivers display/touch   │
 ├──────────────────────────────────────────────────────────────┤
@@ -134,7 +128,7 @@ Reglas de dependencia:
 | `src/config/` | `board_config.h` (pines), `pin_rules.h` (reglas GPIO), `build_config.h` (modo) | 1 |
 | `src/system/` | Información del dispositivo (chip, flash, PSRAM) | 1 |
 | `src/ui/` | Driver gráfico, pantallas, botones, navegación | 2–3, 15 |
-| `src/entropy/` | LDR (ADC), RNG de hardware, pool/conditioning (64 B TRNG + LDR) | 4–6 |
+| `src/entropy/` | RNG de hardware, pool/conditioning (64 B de RNG → SHA-256) | 5–6 |
 | `src/crypto/` | Wrappers sobre SHA-256, HMAC, PBKDF2, RIPEMD-160, Keccak-256 | 7, 10 |
 | `src/bip39/` | Wordlist oficial, entropy → mnemonic, validación, seed | 8–10 |
 | `src/bip32/` | Master key, derivación hardened/normal, secp256k1 | 11 |
@@ -143,7 +137,7 @@ Reglas de dependencia:
 | `src/qr/` | Generación y render de QR | 14 |
 | `src/security/` | Borrado seguro de memoria, modos, política de logs | 1, 19 |
 | `tests/` | Unity en dispositivo (`esp32s3-demo` via PlatformIO) | 1+ |
-| `tools/entropy_analysis/` | Captura y análisis de muestras LDR y TRNG NIST SP 800-90B (Python) | 4, 17 |
+| `tools/entropy_analysis/` | Captura del RNG por USB y análisis NIST SP 800-90B / SP 800-22 (Python) | 17 |
 | `tools/verification/` | Verificación cruzada con implementaciones independientes (Python) | 8+ |
 | `firmware/esp32/` | Tabla de particiones, defaults de configuración, scripts de flasheo | 1+ |
 
@@ -193,8 +187,7 @@ el código de depuración directamente **no exista** en el binario de producció
 
 | Amenaza | Mitigación prevista |
 |---|---|
-| Baja entropía / RNG predecible | RNG HW como fuente principal + LDR adicional + conditioning; health tests básicos (Paso 17/19) |
-| Correlación / predicción del LDR | No se le atribuye entropía completa; análisis estadístico (Paso 17) |
+| Baja entropía / RNG predecible | RNG HW con SAR ADC activo + 512 bits para 256 + conditioning; health tests en la herramienta de análisis (Paso 17/19) |
 | Filtración de mnemonic por Serial/red | Modo PRODUCTION sin logs sensibles; radio deshabilitada |
 | Secretos persistidos en flash | No se guardan; se regeneran/ingresan en cada sesión |
 | Secretos residuales en RAM | Borrado explícito de buffers (`mbedtls_platform_zeroize`) |

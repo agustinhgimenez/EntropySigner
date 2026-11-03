@@ -18,7 +18,6 @@ Inspección realizada el 2026-09-28 sobre el workspace y la PC de desarrollo:
 | ESP32 conectado | **No detectado** | Sólo COM1 / LPT1 de la placa madre; ningún CP210x / CH340 / USB-JTAG de Espressif |
 | Display | **No definido** | — |
 | Touchscreen | **No definido** | — |
-| LDR | **No definido** | — |
 | Git | Instalado (2.55) | — |
 | Python | Instalado (3.13.7) | Útil para `tools/` y para instalar PlatformIO Core |
 | PlatformIO | **No instalado** | Requerido desde el Paso 1 |
@@ -105,66 +104,24 @@ en modo alfanumérico entra en un QR versión 2–3 (25–29 módulos por lado).
 8 px por módulo + margen (quiet zone) ocupa ≈ 264 px, dentro de los 320 px de ancho.
 Una dirección Ethereum (42 caracteres) es similar.
 
-### 2.3 Fuente física adicional — LDR
+### 2.3 Fuente de entropía — RNG de hardware interno
 
-| Componente | Valor |
-|---|---|
-| LDR | GL5528 (5 mm) o similar — ~10–20 kΩ a 10 lux, ≥ 1 MΩ en oscuridad |
-| Resistencia fija | 10 kΩ, 1/4 W (divisor de tensión) |
-| Capacitor | **No** por defecto (ver nota) |
+La única fuente de entropía es el **RNG de hardware del propio ESP32**: no hace
+falta ningún componente externo.
 
-Circuito: **divisor de tensión**.
+Según la documentación de ESP-IDF, el RNG produce números verdaderamente
+aleatorios cuando el RF (WiFi/BT) está activo **o** cuando se habilita la fuente
+de entropía interna con `bootloader_random_enable()`, que usa el ruido térmico
+del **SAR ADC**. Como el firmware nunca enciende WiFi ni Bluetooth, usa la
+segunda opción. Mientras esa fuente está habilitada **no debe usarse el ADC**
+con el driver normal (`analogRead()`); el firmware no usa el ADC para nada más.
 
-```
-3V3 ──[ LDR ]──┬──[ 10 kΩ ]── GND
-               │
-               └──► GPIO1 (ADC1_CH0)
-```
-
-\[
-V_{ADC} = 3.3\,\text{V} \cdot \frac{R_{fija}}{R_{LDR} + R_{fija}}
-\]
-
-- Más luz → \(R_{LDR}\) baja → \(V_{ADC}\) sube.
-- 10 kΩ ubica el punto medio del rango con iluminación de interior.
-- **Nota sobre el capacitor:** un capacitor de filtrado (p. ej. 100 nF) estabiliza la
-  lectura pero **reduce la variabilidad** que queremos estudiar. Se deja como
-  experimento opcional del Paso 17 (comparar con/sin filtro).
-
-> **El LDR NO aporta 256 bits de entropía.** Es una fuente física *adicional*
-> de variabilidad. La fuente criptográfica principal es el RNG de hardware del
-> ESP32. Ver `docs/ARCHITECTURE.md` y (desde el Paso 4) `docs/ENTROPY.md`.
-
-### 2.4 ADC del ESP32-S3
-
-| Parámetro | Valor |
-|---|---|
-| Unidad | **ADC1** (ADC2 comparte recursos con WiFi; se evita) |
-| Canal | ADC1_CH0 → GPIO1 |
-| Resolución | 12 bits (0–4095) |
-| Atenuación | 12 dB (`ADC_ATTEN_DB_12`, antes llamada `DB_11`) → rango útil ≈ 0–3.1 V |
-| Calibración | `esp_adc_cali` (curve fitting) para convertir a mV |
-| Limitación | No linealidad cerca de los extremos (0 V y > 3 V) |
-
-**Interacción ADC ↔ RNG (importante para el diseño):** según la documentación de
-ESP-IDF, el RNG del ESP32-S3 produce números verdaderamente aleatorios cuando el
-RF (WiFi/BT) está activo **o** cuando se habilita la fuente de entropía interna
-con `bootloader_random_enable()`, que usa ruido del **SAR ADC**. Mientras esa
-fuente está habilitada **no debe usarse el ADC** con el driver normal. Como el
-modo producción deshabilitará WiFi/BT, el firmware deberá **secuenciar**:
-
-1. muestrear el LDR con el ADC;
-2. liberar el ADC;
-3. habilitar la fuente de entropía del RNG, leer bytes, deshabilitarla.
-
-Se verificará en el Paso 5.
-
-### 2.5 Alimentación
+### 2.4 Alimentación
 
 | Rail | Fuente | Consumidores |
 |---|---|---|
 | 5 V | USB-C de la DevKit (PC o power bank) | Regulador de la placa; VCC del display si el módulo lo admite |
-| 3.3 V | LDO de la DevKit (≈ 500–800 mA según modelo) | ESP32-S3, lógica del display, touch, divisor LDR |
+| 3.3 V | LDO de la DevKit (≈ 500–800 mA según modelo) | ESP32-S3, lógica del display, touch |
 
 Consumo estimado: ESP32-S3 sin radio ≈ 40–80 mA + backlight ≈ 40–100 mA →
 **< 250 mA**, dentro de lo que entrega un puerto USB 2.0 (500 mA).
@@ -204,19 +161,10 @@ strapping (GPIO0, 3, 45, 46), USB (GPIO19, 20), flash/PSRAM octal (GPIO26–37).
 | CTP_INT | **GPIO17** | Interrupción de toque |
 | CTP_RST | **GPIO18** | |
 
-### 3.3 LDR
-
-| Señal | ESP32-S3 |
-|---|---|
-| LDR (extremo superior) | 3V3 |
-| Nodo LDR/10 kΩ | **GPIO1** (ADC1_CH0) |
-| 10 kΩ (extremo inferior) | GND |
-
-### 3.4 Resumen de pines
+### 3.3 Resumen de pines
 
 | GPIO | Función |
 |---|---|
-| 1 | LDR (ADC1_CH0) |
 | 7 | Backlight PWM |
 | 8 | Display RST |
 | 9 | Display DC |
@@ -240,14 +188,11 @@ cambiar de placa sin tocar el resto del firmware.
 |---|---|---|---|
 | 1 | ESP32-S3-DevKitC-1 N16R8 (o N8R8) | 1 | **Necesario** |
 | 2 | Display 3.5"–4.0" IPS ST7796S 320×480 SPI + touch capacitivo FT6336U | 1 | **Necesario** |
-| 3 | LDR GL5528 | 1–2 | **Necesario** |
-| 4 | Resistencia 10 kΩ 1/4 W | 2 | **Necesario** |
-| 5 | Resistencias 4.7 kΩ (pull-up I²C) | 2 | Opcional |
-| 6 | Protoboard 830 puntos | 1 | **Necesario** |
-| 7 | Cables Dupont macho-macho / macho-hembra | ~30 | **Necesario** |
-| 8 | Cable USB-C **de datos** | 1 | **Necesario** |
-| 9 | Capacitor 100 nF | 1 | Opcional (experimento) |
-| 10 | Carcasa impresa 3D | 1 | Opcional (`hardware/enclosure/`) |
+| 3 | Resistencias 4.7 kΩ (pull-up I²C) | 2 | Opcional |
+| 4 | Protoboard 830 puntos | 1 | **Necesario** |
+| 5 | Cables Dupont macho-macho / macho-hembra | ~30 | **Necesario** |
+| 6 | Cable USB-C **de datos** | 1 | **Necesario** |
+| 7 | Carcasa impresa 3D | 1 | Opcional (`hardware/enclosure/`) |
 
 ---
 
@@ -258,8 +203,8 @@ cambiar de placa sin tocar el resto del firmware.
 | **ESP32-S3 DevKit + ST7796S 3.5–4" IPS + FT6336U** | IPS, 320×480, touch capacitivo, PSRAM, modular | Más cableado | ✅ **Recomendada** |
 | ESP32-S3 DevKit + ILI9488 3.5" + XPT2046 | Muy común y barato | Suele ser TN; ILI9488 por SPI usa 18 bits/píxel (lento); touch resistivo | Aceptable |
 | ESP32-S3 DevKit + ILI9341 / ST7789 2.8" 240×320 | Barato, rápido | QR y texto más ajustados | Aceptable |
-| Placa integrada ESP32-S3 + pantalla táctil (p. ej. Waveshare ESP32-S3-Touch-LCD-3.5, Makerfabs ESP32-S3 Parallel TFT) | Sin cableado, prolija | El LDR hay que agregarlo en pines libres; pinout fijo; verificar modelo exacto | Buena alternativa |
-| "Cheap Yellow Display" ESP32-2432S028R | Todo en uno, barato, **trae un LDR integrado** | ESP32 clásico sin PSRAM, 2.8" TN 240×320, touch resistivo | Sólo para pruebas |
+| Placa integrada ESP32-S3 + pantalla táctil (p. ej. Waveshare ESP32-S3-Touch-LCD-3.5, Makerfabs ESP32-S3 Parallel TFT) | Sin cableado, prolija | Pinout fijo; verificar modelo exacto | Buena alternativa |
+| "Cheap Yellow Display" ESP32-2432S028R | Todo en uno, barato | ESP32 clásico sin PSRAM, 2.8" TN 240×320, touch resistivo | Sólo para pruebas |
 | ESP-IDF puro en vez de Arduino | Control total, APIs oficiales | Curva de aprendizaje mayor | No por ahora (ver `ARCHITECTURE.md`) |
 
 ---
@@ -268,6 +213,6 @@ cambiar de placa sin tocar el resto del firmware.
 
 1. **Comprar/confirmar** ESP32-S3 y el módulo de pantalla exacto (enviar link o
    modelo para validar controlador y tipo de touch).
-2. Conseguir LDR + resistencias + protoboard + cable USB-C de datos.
+2. Conseguir protoboard, cables Dupont y cable USB-C de datos.
 3. Instalar **PlatformIO** (extensión o PlatformIO Core vía `pip`).
 4. Mover el proyecto a una **ruta local corta** (ver advertencia arriba).

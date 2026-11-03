@@ -398,7 +398,7 @@
                     <div class="card">
                         <h3>Criptografía & Entropía</h3>
                         <ul>
-                            <li>Pipeline híbrido: <strong>LDR (física) + ESP32 TRNG (hardware)</strong>.</li>
+                            <li>Única fuente de entropía: <strong>RNG de hardware del ESP32</strong> (ruido térmico del SAR ADC).</li>
                             <li>Acondicionamiento determinístico con <strong>SHA-256</strong>.</li>
                             <li>Estándar <strong>BIP-39</strong> completo (24 palabras mnemónicas + suma de verificación de 8 bits).</li>
                             <li>Derivación PBKDF2-HMAC-SHA512 (semilla de 512 bits).</li>
@@ -428,9 +428,8 @@
             </div>
             <div class="slide-body">
                 <pre>
-LDR ──► ADC1_CH0 ──► LDR DATA (128x16b) ─┐
-                                         ├──► SHA-256 (extractor) ──► 256 bits de entropía
-        ESP32 TRNG (SAR ADC noise) ──────┘                                │
+ESP32 TRNG (SAR ADC noise) ──► 512 bits ──► SHA-256 (extractor) ──► 256 bits de entropía
+                                                                          │
                                                                           ▼
  24 palabras mnemónicas ◄── 264 bits (24x11b) ◄── SHA-256 Checksum (8b) ─┘
          │
@@ -455,7 +454,7 @@ LDR ──► ADC1_CH0 ──► LDR DATA (128x16b) ─┐
             <div class="slide-header">
                 <div class="slide-title-wrap">
                     <span class="slide-badge">04 // FUNDAMENTO CRIPTOGRÁFICO</span>
-                    <h2>El Rol del LDR y el Extractor SHA-256</h2>
+                    <h2>El RNG del ESP32 y el Extractor SHA-256</h2>
                 </div>
                 <div class="slide-meta">NIST SP 800-90B Compliance</div>
             </div>
@@ -466,11 +465,11 @@ LDR ──► ADC1_CH0 ──► LDR DATA (128x16b) ─┐
                             Por la desigualdad de Rényi: $H_{\min}(\text{salida}) \le \min(256, H_{\min}(\text{entrada}))$. Un hash oculta estructura y uniformiza la distribución, pero no puede transformar datos predecibles en aleatorios.
                         </div>
                     </li>
-                    <li><strong>¿Por qué el LDR tiene crédito de entropía 0?</strong>
-                        <br>La luz ambiente es controlable externamente (una linterna satura el ADC en 4095; una tapa lo apaga a 0). No cumple el estándar NIST SP 800-90B de modelado estocástico independiente.
+                    <li><strong>¿De dónde sale la aleatoriedad?</strong>
+                        <br>Del <strong>RNG de hardware del ESP32</strong>: ruido térmico del SAR ADC mezclado por XOR con el jitter entre dos relojes independientes. Sin WiFi ni Bluetooth, sólo es verdaderamente aleatorio con <code>bootloader_random_enable()</code> activo, y así lo usamos.
                     </li>
-                    <li><strong>Defensa en profundidad:</strong>
-                        <br>La fuente criptográfica primaria es el <strong>TRNG interno del ESP32-S3</strong>. El LDR suma variabilidad física que jamás debilita la salida en caso de un RNG sano.
+                    <li><strong>Margen de seguridad:</strong>
+                        <br>Se piden <strong>512 bits para extraer 256</strong> (NIST SP 800-90C pide al menos 64 bits extra), con 2 µs entre palabras para no leer más rápido que el ruido.
                     </li>
                 </ul>
             </div>
@@ -507,20 +506,20 @@ LDR ──► ADC1_CH0 ──► LDR DATA (128x16b) ─┐
                             <td>Entropía completa (IID sano)</td>
                         </tr>
                         <tr>
-                            <td><strong>LDR Normal</strong></td>
-                            <td>6.372 bits</td>
-                            <td>5.848 bits</td>
-                            <td>3.155 bits</td>
-                            <td><span style="color:var(--gold)">3.155 bits / muestra</span></td>
-                            <td>Autocorrelación detectable (Lag 1-10)</td>
+                            <td><strong>Fuente sesgada (52% unos)</strong></td>
+                            <td>7.988 bits</td>
+                            <td>7.354 bits</td>
+                            <td>7.746 bits</td>
+                            <td><span style="color:var(--gold)">7.354 bits / byte</span></td>
+                            <td>Lo detectan los tests de uniformidad (SP 800-22)</td>
                         </tr>
                         <tr>
-                            <td><strong>LDR Ataque (Luz Fija)</strong></td>
-                            <td>1.733 bits</td>
-                            <td>0.846 bits</td>
-                            <td>0.297 bits</td>
-                            <td><span style="color:var(--red)">0.297 bits / muestra</span></td>
-                            <td>Repetition Count Fails (Atascado)</td>
+                            <td><strong>RNG trabado (simulado)</strong></td>
+                            <td>7.969 bits</td>
+                            <td>7.258 bits</td>
+                            <td>0.145 bits</td>
+                            <td><span style="color:var(--red)">0.145 bits / byte</span></td>
+                            <td>Health tests FALLAN (Atascado)</td>
                         </tr>
                         <tr>
                             <td><strong>SHA256(Contador)</strong></td>
@@ -718,7 +717,7 @@ inline void secureMemzero(void* ptr, size_t len) {
                         <br>Controlador LovyanGFX optimizado por bus SPI de 40 MHz con refresco parcial de bajo parpadeo.
                     </li>
                     <li><strong>Flujo seguro guiado por máquina de estados:</strong>
-                        <br><code>BOOT</code> $\rightarrow$ <code>IDLE</code> (Gauge del sensor LDR) $\rightarrow$ <code>GENERATING</code> $\rightarrow$ <code>BACKUP_WARNING</code> $\rightarrow$ <code>SHOW_MNEMONIC</code> $\rightarrow$ <code>SHOW_BTC / SHOW_ETH</code>.
+                        <br><code>BOOT</code> $\rightarrow$ <code>IDLE</code> (fuente: RNG de hardware) $\rightarrow$ <code>GENERATING</code> $\rightarrow$ <code>BACKUP_WARNING</code> $\rightarrow$ <code>SHOW_MNEMONIC</code> $\rightarrow$ <code>SHOW_BTC / SHOW_ETH</code>.
                     </li>
                     <li><strong>Generación offline de Códigos QR:</strong>
                         <br>Usa <code>ricmoo/QRCode</code> versión 3 (nivel de corrección M). Muestra exclusivamente las direcciones públicas de recepción para que el usuario pueda enviar fondos desde su teléfono sin cables ni conexiones de datos.

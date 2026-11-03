@@ -24,8 +24,7 @@ derivación jerárquica de claves y gestión de direcciones para Bitcoin y Ether
 | Feature | Descripción | Estado |
 |---|---|---|
 | ESP32 | ESP32-S3 con PSRAM y USB nativo | ✅ Firmware base (Paso 1) |
-| Physical entropy | LDR leído por ADC1 como fuente adicional (crédito de entropía 0) | ✅ Implementado (Paso 4) |
-| Hardware RNG | RNG de hardware del ESP32 con SAR ADC como fuente de ruido | ✅ Implementado (Paso 5) |
+| Hardware RNG | RNG de hardware del ESP32 (única fuente de entropía), con el SAR ADC como fuente de ruido | ✅ Implementado (Paso 5) |
 | SHA-256 | Acondicionamiento de entropía y checksum BIP-39 (mbedTLS) | ✅ Implementado (Pasos 6–7) |
 | BIP-39 | Mnemonic de 24 palabras + validación + seed PBKDF2 | ✅ Implementado (Pasos 8–10) |
 | BIP-32 | Derivación jerárquica de claves sobre secp256k1 | ✅ Implementado (Paso 11) |
@@ -41,7 +40,7 @@ derivación jerárquica de claves y gestión de direcciones para Bitcoin y Ether
 
 > Todo el firmware **compila** en ambos entornos y los vectores de prueba están
 > verificados en forma cruzada con Python. La **ejecución en la placa física**
-> (tests Unity en dispositivo, lectura real del LDR, escaneo de QR) queda
+> (tests Unity en dispositivo, captura real del RNG, escaneo de QR) queda
 > pendiente hasta disponer de la ESP32-S3 con el display: ver
 > [Criterios de finalización](#criterios-de-finalización).
 
@@ -54,9 +53,7 @@ derivación jerárquica de claves y gestión de direcciones para Bitcoin y Ether
 </p>
 
 ```
-LDR ──► ADC ──► LDR DATA ─┐
-                          ├──► SHA-256 (conditioning) ──► 256 bits
-        ESP32 HW RNG ─────┘
+ESP32 HW RNG (512 bits) ──► SHA-256 (conditioning) ──► 256 bits
 
 256 bits ──► SHA-256 ──► 8-bit checksum ──► 264 bits ──► 24 × 11 bits ──► 24 words
 
@@ -69,10 +66,10 @@ LDR ──► ADC ──► LDR DATA ─┐
                    address ──► QR                                 address ──► QR
 ```
 
-**Principio de seguridad:** la fuente criptográfica principal es el **RNG de
-hardware del ESP32**. El **LDR es una fuente física adicional** de variabilidad;
-no se afirma que aporte 256 bits. **SHA-256 no crea entropía**: acondiciona los
-datos y oculta estructura, pero no puede convertir una fuente pobre en una rica.
+**Principio de seguridad:** la única fuente de entropía es el **RNG de hardware
+del ESP32**, leído con el SAR ADC activo como fuente de ruido físico. Se piden
+512 bits para obtener 256. **SHA-256 no crea entropía**: acondiciona los datos y
+oculta estructura, pero no puede convertir una fuente pobre en una rica.
 
 Detalle: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
@@ -85,7 +82,7 @@ Detalle: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 | MCU | ESP32-S3-DevKitC-1 (N16R8) |
 | Display | 3.5"–4.0" IPS · ST7796S · 320×480 · SPI |
 | Touch | Capacitivo FT6336U · I²C |
-| Entropía física | LDR GL5528 + 10 kΩ (divisor) → GPIO1 / ADC1_CH0 |
+| Entropía | RNG de hardware interno del ESP32 (sin componentes externos) |
 | Alimentación | USB-C 5 V → LDO 3.3 V |
 
 <p align="center">
@@ -102,7 +99,6 @@ Detalle, pinout, BOM y alternativas: [`docs/HARDWARE.md`](docs/HARDWARE.md)
 - [x] Paso 1 — Project foundation
 - [x] Paso 2 — Display
 - [x] Paso 3 — Touchscreen
-- [x] Paso 4 — LDR
 - [x] Paso 5 — Hardware RNG
 - [x] Paso 6 — Entropy conditioning
 - [x] Paso 7 — SHA-256
@@ -132,7 +128,6 @@ placa física se indica aparte.
 - [ ] ESP32 funcionando *(firmware compila en ambos entornos; falta probar en placa)*
 - [ ] Display funcionando *(driver y pantallas implementados; falta probar en placa)*
 - [ ] Touch funcionando *(detección FT6336U y botones implementados; falta calibrar en placa)*
-- [ ] LDR funcionando *(muestreo implementado; falta capturar muestras reales)*
 - [ ] RNG funcionando *(implementado; falta ejecutar en placa)*
 - [ ] Entropy pipeline funcionando *(implementado y documentado; falta ejecutar en placa)*
 - [x] SHA-256 validado *(vectores NIST FIPS 180-2; se corrigió un vector mal transcripto)*
@@ -147,7 +142,7 @@ placa física se indica aparte.
 - [ ] QR funcionando *(render implementado; falta escanear con un teléfono)*
 - [ ] UI funcionando *(máquina de estados implementada; falta probar en placa)*
 - [ ] Recovery flow funcionando *(`validateMnemonic`/`mnemonicToSeed` existen, pero la UI no permite ingresar un mnemonic: trabajo futuro)*
-- [x] Entropy analysis funcionando *(sobre fuentes simuladas; falta capturar el LDR real)*
+- [x] Entropy analysis funcionando *(sobre fuentes simuladas; falta capturar el RNG real de la placa)*
 - [ ] Tests completos *(49 tests Unity escritos y compilados; falta ejecutarlos en la ESP32-S3)*
 - [x] Security review *([`docs/SECURITY.md`](docs/SECURITY.md))*
 - [x] README completo
@@ -171,7 +166,7 @@ EntropySigner/
 │   ├── config/                 build_config.h · board_config.h · pin_rules.h
 │   ├── security/               secure_log.h (logs por modo) · secure_mem.h (ceroizado)
 │   ├── system/                 device_info (chip, flash, PSRAM)
-│   ├── entropy/                ldr_entropy · hw_rng · entropy_pool (SHA-256 conditioning)
+│   ├── entropy/                hw_rng · entropy_pool (SHA-256 conditioning)
 │   ├── crypto/                 sha256 · ripemd160 · keccak256 · base58
 │   ├── bip39/                  wordlist oficial · mnemonic · validación · PBKDF2 seed
 │   ├── bip32/                  master key · CKDpriv/CKDpub · derivePath (secp256k1)
@@ -214,8 +209,8 @@ Placa N16R8: ver el comentario en `platformio.ini` para habilitar 16 MB de flash
 
 Flujo en el dispositivo:
 
-1. **BOOT → IDLE.** La pantalla de inicio muestra la lectura del LDR en vivo
-   ("Pasa la mano sobre el sensor") y el botón **GENERAR WALLET**.
+1. **BOOT → IDLE.** La pantalla de inicio describe la fuente de entropía (RNG de
+   hardware, 64 bytes → SHA-256) y muestra el botón **GENERAR WALLET**.
 2. **GENERATING.** Entropía 256 bits → 24 palabras → seed → master key →
    direcciones BTC y ETH, con el progreso de cada paso en pantalla.
 3. **BACKUP_WARNING → SHOW_MNEMONIC.** Advertencia obligatoria y luego las 24
@@ -228,7 +223,9 @@ Herramientas en la PC (Python 3, sólo biblioteca estándar; `--serial` requiere
 ```powershell
 python tools/verification/verify_cross.py                       # 172 checks de validación matemática (Python vs C++ vs estándares)
 python tools/entropy_analysis/analyze_entropy.py --synthetic all  # estimadores SP 800-90B
-python tools/entropy_analysis/analyze_entropy.py --file captura_ldr.txt --bits 12
+python tools/entropy_analysis/capture_esp32.py --port COM4 --rng 1000000 --out rng.bin
+python tools/entropy_analysis/analyze_entropy.py --file rng.bin --format u8
+python tools/entropy_analysis/nist_sp800_22.py --file rng.bin   # 9 tests NIST SP 800-22
 ```
 
 ---
@@ -246,13 +243,12 @@ arquitectura, y crear la estructura inicial del repositorio. Sin código de wall
 - Inspección del entorno: Git 2.55 y Python 3.13.7 instalados; PlatformIO no
   instalado; ningún ESP32 conectado por USB.
 - Hardware propuesto: ESP32-S3-DevKitC-1 + display IPS ST7796S 320×480 SPI con
-  touch capacitivo FT6336U + LDR GL5528 con divisor de 10 kΩ en GPIO1 (ADC1).
+  touch capacitivo FT6336U.
 - Framework elegido: **PlatformIO + Arduino (ESP32)**, con acceso a las APIs de ESP-IDF.
 - Arquitectura en capas; los módulos criptográficos serán independientes de
   Arduino para poder testearlos contra vectores oficiales.
-- Hallazgo de diseño: en ESP32-S3 la fuente de entropía interna del RNG (sin
-  radio) usa el SAR ADC, así que el muestreo del LDR y la lectura del RNG deben
-  **secuenciarse** (se valida en el Paso 5).
+- Hallazgo de diseño: sin radio, la fuente de ruido del RNG es el SAR ADC, así
+  que mientras se lee el RNG no se puede usar `analogRead()` (se valida en el Paso 5).
 - Hallazgo de entorno: el proyecto está en una ruta de red UNC con espacios; la
   terminal y el compilador no funcionan de forma confiable ahí. Se trabaja por
   la ruta local `D:\...`. Se agregó `.editorconfig` (UTF-8, LF).
@@ -284,8 +280,7 @@ verificados como XML bien formado.
 - `config/build_config.h`: nombre, versión `0.1.0` y modo. Exige exactamente uno
   de `ES_MODE_DEMO` / `ES_MODE_PRODUCTION` (error de compilación si no).
 - `config/pin_rules.h` + `config/board_config.h`: pinout de `docs/HARDWARE.md`
-  con `static_assert` que impiden usar pines de strapping, USB o flash/PSRAM, y
-  que obligan a que el LDR esté en ADC1.
+  con `static_assert` que impiden usar pines de strapping, USB o flash/PSRAM.
 - `security/secure_log.h`: `ES_LOG_INFO` (siempre) y `ES_LOG_DEBUG` (eliminado
   del binario en PRODUCTION).
 - `system/device_info`: chip, núcleos, frecuencia, flash y PSRAM por Serial.
@@ -370,10 +365,10 @@ interfaz de la wallet.
 **Resultado.** Compila en ambos entornos. ⏳ Calibración de coordenadas y
 orientación del touch pendientes de la placa física.
 
-### Pasos 4–7 — Entropía física, RNG de hardware, acondicionamiento y SHA-256
+### Pasos 5–7 — RNG de hardware, acondicionamiento y SHA-256
 
-**Objetivo.** Producir 256 bits de entropía acondicionada combinando el RNG de
-hardware (fuente principal) con el LDR (fuente adicional).
+**Objetivo.** Producir 256 bits de entropía acondicionada a partir del RNG de
+hardware del ESP32.
 
 **Implementación.**
 
@@ -382,23 +377,20 @@ hardware (fuente principal) con el LDR (fuente adicional).
   de ceroizado.
 - `crypto/sha256`: wrapper sobre mbedTLS 2.28 (API `*_ret`, acelerada por HW),
   con interfaz de una pasada y en streaming.
-- `entropy/ldr_entropy`: `collectLdrSamples()` lee el divisor LDR por ADC1
-  (12 bits) con 200 µs entre muestras.
-- `entropy/hw_rng`: `fillRandomBytes()` envuelve `esp_fill_random()` entre
+- `entropy/hw_rng`: `fillRandomBytes()` lee `esp_random()` entre
   `bootloader_random_enable()` / `disable()`, que activan el **SAR ADC como
-  fuente de ruido físico**. Sin radio encendida, el RNG del ESP32-S3 sería sólo
-  pseudoaleatorio.
+  fuente de ruido físico**, y espera 2 µs entre palabras de 32 bits para que
+  cada una incorpore ruido nuevo (TRM §18.3). Sin radio encendida y sin
+  `bootloader_random_enable()`, el RNG del ESP32 sería sólo pseudoaleatorio.
 - `entropy/entropy_pool`: `generateEntropy256()` calcula
-  `SHA-256("EntropySigner/entropy-pool/v1" ‖ RNG 64 B ‖ flag ‖ 128 muestras LDR)`.
-  El LDR se muestrea **antes** que el RNG: el SAR ADC no puede atender a la vez
-  al RNG y al driver ADC, y además así un atacante que controle la luz no puede
-  adaptarla a la salida del RNG.
+  `SHA-256("EntropySigner/entropy-pool/v2" ‖ RNG 64 B)`.
 
-**Decisión clave.** Al LDR se le acreditan **0 bits** de entropía: sólo aporta
-defensa en profundidad. SHA-256 acondiciona, no crea entropía.
+**Decisión clave.** Se piden 512 bits para obtener 256: NIST SP 800-90C pide
+que la entrada tenga al menos 64 bits más de los que se extraen. SHA-256
+acondiciona, no crea entropía.
 
 **Archivos.** `src/security/secure_mem.h`, `src/crypto/sha256.{h,cpp}`,
-`src/entropy/{ldr_entropy,hw_rng,entropy_pool}.{h,cpp}`,
+`src/entropy/{hw_rng,entropy_pool}.{h,cpp}`,
 `tests/test_crypto/test_main.cpp`.
 
 **Cómo probar.** `python -m platformio test -e esp32s3-demo -f test_crypto`
@@ -510,26 +502,26 @@ prueba del flujo táctil pendientes de la placa.
 
 ### Paso 17 — Análisis de entropía (NIST SP 800-90B)
 
-**Objetivo.** Medir, no suponer, cuánta entropía aporta cada fuente.
+**Objetivo.** Medir, no suponer, cuánta entropía aporta el RNG.
 
 **Implementación.** `tools/entropy_analysis/analyze_entropy.py` implementa los
 estimadores **6.3.1 MCV**, **6.3.2 Collision** y **6.3.8 Lag Prediction**,
 Shannon, chi-cuadrado, autocorrelación (lags 1–10), los health tests RCT/APT
 (§4.4) y la entropía de salida de SHA-256 según §3.1.5.1.2. Acepta archivos,
-captura por puerto serie y cuatro fuentes simuladas (`trng`, `ldr`,
-`ldr-attack`, `sha256-counter`).
+captura por puerto serie y cuatro fuentes simuladas (`trng`, `biased`,
+`stuck`, `sha256-counter`). `tools/entropy_analysis/nist_sp800_22.py` agrega 9
+tests de NIST SP 800-22 y `capture_esp32.py` captura bytes reales del RNG por USB.
 
-**Resultado (N = 200 000).**
+**Resultado (N = 100 000).**
 
 | Fuente | H_I (min-entropía) | Observación |
 |---|---|---|
-| `trng` | 7.29 bits/byte | Referencia |
-| `ldr` | 3.16 bits/muestra de 12 bits | No IID: r₁ = 0.98; MCV sobrestima un 85 % |
-| `ldr-attack` (linterna) | 0.30 bits/muestra | El Repetition Count Test **falla** |
-| `sha256-counter` | 7.32 bits/byte | **0 bits reales**: los tests estadísticos no prueban aleatoriedad |
+| `trng` | 7.43 bits/byte | Referencia |
+| `biased` (52 % de unos) | 7.35 bits/byte | Los estimadores apenas lo notan; los tests de uniformidad sí |
+| `stuck` (RNG trabado) | 0.15 bits/byte | Los health tests **fallan** |
+| `sha256-counter` | 7.27 bits/byte | **0 bits reales**: los tests estadísticos no prueban aleatoriedad |
 
-Conclusión: se confirma la política de crédito 0 para el LDR. Detalle en
-[`docs/SECURITY.md` §5.3](docs/SECURITY.md#53-evaluación-según-nist-sp-800-90b).
+Detalle en [`docs/SECURITY.md` §5.3](docs/SECURITY.md#53-evaluación-según-nist-sp-800-90b).
 
 ### Paso 18 — Tests criptográficos y verificación cruzada
 
@@ -558,7 +550,7 @@ los estándares.
 
 **Implementación.** [`docs/SECURITY.md`](docs/SECURITY.md): activos y
 adversarios (A1–A5), siete amenazas con riesgo residual (canal lateral,
-manipulación del LDR, RNG predecible, volcado de memoria, glitching,
+RNG predecible, volcado de memoria, glitching,
 observación, kleptografía), política de ceroizado, air-gap verificable con
 `grep`, justificación de SHA-256 como extractor, decisiones de BIP-32/39/44,
 11 limitaciones y recomendaciones para un producto comercial (Secure Element,
@@ -615,7 +607,7 @@ Garantías que el firmware **sí** implementa:
 - **Sin radio**: WiFi y Bluetooth nunca se inicializan.
 - **Ceroizado** de entropía, mnemonic, seed y claves en todos los caminos de salida, con timeout de inactividad de 2 minutos.
 - **QR y Serial sólo con datos públicos**; en PRODUCTION los logs de depuración y las direcciones por Serial están desactivados.
-- **TRNG de 64 bytes (512 bits)** con acondicionador SHA-256 para cumplir SP 800-90C (256 bits completos de min-entropía). LDR con crédito 0: la seguridad descansa en el silicio.
+- **TRNG de 64 bytes (512 bits)** con acondicionador SHA-256 para cumplir SP 800-90C (256 bits completos de min-entropía).
 
 ## Limitations
 
@@ -625,9 +617,9 @@ Lista completa en [`docs/SECURITY.md` §8](docs/SECURITY.md#8-limitaciones-del-p
 - Sin Secure Element, Secure Boot ni flash encryption: con acceso USB se puede
   reemplazar el firmware.
 - Sin protección contra canales laterales ni inyección de fallos.
-- Sin health tests en línea sobre el RNG ni el LDR.
+- Sin health tests en línea sobre el RNG.
 - Sin PIN, sin recuperación desde un mnemonic existente y sin firma de transacciones.
-- El análisis del LDR usa datos simulados hasta capturar muestras reales.
+- El análisis de entropía usa datos simulados hasta capturar el RNG real de la placa.
 - Los tests Unity están compilados pero no se ejecutaron todavía en la placa.
 
 ## Academic Context
