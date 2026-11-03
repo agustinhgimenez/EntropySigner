@@ -6,7 +6,7 @@
 namespace es {
 namespace entropy {
 
-// Wrapper over the ESP32-S3 hardware RNG (esp_random / esp_fill_random).
+// Wrapper over the ESP32 / ESP32-S3 hardware RNG (esp_random).
 //
 // The RNG is a true RNG only while a physical noise source is mixed in: the
 // radio, or the SAR ADC when enabled through bootloader_random_enable(). With
