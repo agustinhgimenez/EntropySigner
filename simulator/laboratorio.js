@@ -184,8 +184,8 @@
         const n = Number($("nsamples").value);
         const status = $("stats-status");
         const sources = [
-            { name: "RNG (CSPRNG del navegador)", note: "equivale al RNG de hardware", bits: 8, make: async () => browserRng(n) },
-            { name: "Fuente sesgada (simulada)", note: "cada bit vale 1 con probabilidad 52%", bits: 8, make: async () => biasedBits(n) },
+            { name: "Referencia: CSPRNG del navegador", note: "buena, pero no es la placa", bits: 8, make: async () => browserRng(n) },
+            { name: "Referencia: fuente sesgada", note: "rota a prop&oacute;sito: cada bit vale 1 con probabilidad 52%", bits: 8, make: async () => biasedBits(n) },
             { name: "SHA-256(contador)", note: "predecible a prop&oacute;sito", bits: 8, make: () => sha256Counter(n) },
         ];
         if (dev.connected()) {
@@ -205,7 +205,9 @@
             status.textContent = e.message;
             return;
         }
-        status.textContent = `${n.toLocaleString("es-AR")} muestras por fuente simulada`;
+        const real = rows.find((s) => s.real);
+        status.textContent = `${n.toLocaleString("es-AR")} muestras por fuente de referencia` +
+            (real ? ` · ${real.note} de la ESP32` : "");
 
         const pv = (p) => `<span class="${p < 0.01 ? "bad" : "ok"}">${p < 1e-4 ? p.toExponential(1) : p.toFixed(4)}</span>`;
         const verdict = (s) => {
@@ -245,7 +247,9 @@
             </ul>
             ${rows.some((s) => s.real) ? `<div class="note">La fila verde son datos <b>reales de la placa</b>, le&iacute;dos con el mismo
                 c&oacute;digo que usa el firmware para generar la wallet.</div>` : ""}
-            <div class="note">Sin la placa conectada, la fila &laquo;RNG&raquo; usa el generador del navegador. Para muestras m&aacute;s grandes (&ge; 10<sup>6</sup>)
+            ${rows.some((s) => s.real) ? "" : `<div class="note" style="border-color:var(--amber)"><b>La ESP32 no est&aacute; conectada:</b>
+                ninguna fila de esta tabla viene de la placa. Toc&aacute; &laquo;Conectar ESP32&raquo; arriba y volv&eacute; a correr las pruebas.</div>`}
+            <div class="note">Para muestras m&aacute;s grandes (&ge; 10<sup>6</sup>)
                 se capturan por USB y se analizan con <code>python tools/entropy_analysis/analyze_entropy.py</code>, que agrega los estimadores
                 Lag Prediction y Collision de NIST.</div>`;
     }
@@ -752,7 +756,18 @@
 
     $("source").addEventListener("change", () => selectSource($("source").value));
     useImported(readStoredWallet() || parseImport());
-    if (!imported) selectSource("new");
     renderSecurity();
-    run();
+    if (imported) {
+        run();
+    } else {
+        // Without a wallet from the simulator, wait for the board instead of silently using the browser RNG.
+        selectSource("esp32");
+        $("origin").className = "origin local";
+        $("origin").innerHTML = "No hay ninguna wallet del simulador en memoria (no se gener&oacute; ninguna o ya se borr&oacute; al volver a IDLE). " +
+            "Toc&aacute; <b>Conectar ESP32</b> para generar una con el RNG real de la placa, o eleg&iacute; " +
+            "&laquo;RNG simulado&raquo; para practicar sin hardware.";
+        dev.onStatus((info) => {
+            if (info && !current && !imported) run();
+        });
+    }
 })();

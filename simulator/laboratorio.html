@@ -198,7 +198,7 @@
                 (<code>esp_random</code> con <code>bootloader_random_enable()</code> activo): ruido t&eacute;rmico del conversor
                 anal&oacute;gico-digital (SAR ADC) mezclado con la diferencia entre dos relojes independientes. El firmware pide
                 64 bytes (512 bits) para obtener 256 bits de entrop&iacute;a.</p>
-            <div id="out-sources" class="muted">Presion&aacute; &laquo;Generar y explicar&raquo;.</div>
+            <div id="out-sources" class="muted">Todav&iacute;a no hay wallet: conect&aacute; la ESP32 o eleg&iacute; otra fuente arriba.</div>
         </section>
 
         <section class="step" id="s2">
@@ -225,8 +225,9 @@
                 <button id="run-stats">Correr pruebas</button>
                 <span id="stats-status" class="muted"></span>
             </div>
-            <p class="muted" style="font-size:13px">Con la ESP32 conectada se agregan dos filas con datos <b>reales</b> de la placa
-                (hasta 20.000 bytes del RNG y 10.000 lecturas del ADC, porque el USB a 115200 baudios transfiere ~5 KB/s).</p>
+            <p class="muted" style="font-size:13px">Con la ESP32 conectada se agrega arriba una fila verde con datos <b>reales</b> de la placa
+                (hasta 20.000 bytes del RNG, porque el USB a 115200 baudios transfiere ~5 KB/s). Las otras filas son
+                <b>referencias</b> generadas en el navegador para comparar: una buena, una rota a prop&oacute;sito y una predecible.</p>
             <div id="out-stats"></div>
         </section>
 
